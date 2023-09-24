@@ -1,1 +1,6 @@
-rootProject.name = 'omegat-caiyun-interpreter-plugin'
+//pluginManagement {
+//    repositories {
+//        gradlePluginPortal()
+//    }
+//}
+rootProject.name = 'omegat-niutrans-plugin'

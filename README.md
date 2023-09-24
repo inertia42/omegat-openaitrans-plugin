@@ -1,7 +1,7 @@
-# OmegaT 彩云小译插件
-一个能让 OmegaT 从彩云小译获取机器翻译的插件。内置了官方测试 Key，不用配置也可用，但不保证可靠性（经常会触发使用上限），所以还是建议申请一个彩云小译的 Token。
+# OmegaT 小牛插件
+一个能让 OmegaT 从小牛获取机器翻译的插件。内置了官方测试 Key，不用配置也可用，但不保证可靠性（经常会触发使用上限），所以还是建议申请一个彩云小译的 Token。
 
-已在 OmegaT 4.3.2 和 gradle 3.0 环境下测试通过。
+已在 JDK17,OmegaT 6.0.0,gradle 8.3 环境下测试通过。
 
 参考了以下项目的代码，把我从黑箱带入 OmegaT 插件开发，感谢各位作者。
 > https://github.com/yoyicue/omegat-tencent-plugin

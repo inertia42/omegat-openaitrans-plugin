@@ -27,3 +27,8 @@ build
 nbproject
 .gradle
 .nb-gradle
+
+#mine
+gradle
+gradlew.bat
+gradlew
