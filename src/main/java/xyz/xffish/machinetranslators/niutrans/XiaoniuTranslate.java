@@ -31,7 +31,7 @@ import xyz.xffish.machinetranslators.niutrans.util.OLang2TLang;
 public class XiaoniuTranslate extends BaseTranslate {
 
   /**
-   * 设置存储 key 的名字，读取和设置值由 OmegaT 提供 API 来操作.
+  * 设置存储 key 的名字，读取和设置值由 OmegaT 提供 API 来操作.
    */
   private static final String PROPERTY_API_SECRET_KEY = "xiaoniu.api.secret.Key";
   /**
@@ -143,7 +143,7 @@ public class XiaoniuTranslate extends BaseTranslate {
 //        JSONUtil.parse(bodyMap);
     String bodyStr = JSONUtil.toJsonStr(bodyMap);
 
-    LOGGER.info("bodyStr = {}", bodyStr);
+    LOGGER.debug("bodyStr = {}", bodyStr);
 
     HttpRequest post = HttpUtil.createPost(URL)
 
@@ -159,7 +159,7 @@ public class XiaoniuTranslate extends BaseTranslate {
     String translation = "";
     String responseBody = response.body();
 
-    LOGGER.info("response body = {}", responseBody);
+    LOGGER.debug("response body = {}", responseBody);
 
     JSONObject jsonObject = JSONUtil.parseObj(responseBody);
     if (response.isOk()) {
