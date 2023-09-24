@@ -1,7 +1,7 @@
 # OmegaT 小牛插件
 一个能让 OmegaT 从小牛获取机器翻译的插件。内置了官方测试 Key，不用配置也可用，但不保证可靠性（经常会触发使用上限），所以还是建议申请一个彩云小译的 Token。
 
-已在 JDK17,OmegaT 6.0.0,gradle 8.3 环境下测试通过。
+已在 JDK11,OmegaT 6.0.0,gradle 8.3 环境下测试通过。
 
 参考了以下项目的代码，把我从黑箱带入 OmegaT 插件开发，感谢各位作者。
 > https://github.com/yoyicue/omegat-tencent-plugin
@@ -13,17 +13,13 @@
 鉴于 OmegaT 插件教程太少和零散，我将在 readme 的[最下面](#introduction)讲以下入门环境搭建和参考资料。
 
 ## 使用方法
-1. 首先最好申请一个彩云小译 Token
+1. 申请一个小牛翻译apikey
 
-    登录进[彩云科技开放平台](https://dashboard.caiyunapp.com/user/sign_in/)，申请开通小译 Token（每月翻译 100 万字以内是免费的），也许需要等待一到两个工作日。
-    
-2. 下载 releases 里的 zip，解压得到 jar 文件和别的插件一样放进 OmegaT 插件目录。这个目录默认应该在 OmegaT 安装目录下的`plugins`文件夹
-3. 打开 OmegaT，选项——首选项——机器翻译，选中`Caiyun Xiaoyi Translate`，点击配置，然后填入第一步得到 Token，最后勾选启用，点确定关闭首选项窗口。
+    登录进[小牛翻译文档](https://niutrans.com/documents/contents/question/1)，申请开通小牛翻译 apikey（每日赠送 20 万字），也许需要等待一到两个工作日。
+2. 克隆本项目，进入项目根目录，然后运行`./gradlew build`。    
+3. 下载 releases 里的 zip，解压得到 jar 文件和别的插件一样放进 OmegaT 插件目录。这个目录默认应该在 OmegaT 安装目录下的`plugins`文件夹
+3. 打开 OmegaT，选项——首选项——机器翻译，选中`Xiaoniu Translate`，点击配置，然后填入第一步得到 apikey，最后勾选启用，点确定关闭首选项窗口。
 4. 没有第 4 步，做完上面 3 步，打开你的翻译项目，你应该能在机器翻译面板看到来自彩云小译的结果了。Enjoy it!
-
-## 自行编译
-1. 克隆本项目，进入项目根目录，然后运行`./gradlew build`。
-2. 在`build/libs/`目录下，拷贝`omegat-caiyun-interpreter-plugin-*.jar`文件到 OmegaT 的插件目录。
 
 ## 许可证
 本项目采用[木兰宽松许可证, 第2版](https://license.coscl.org.cn/MulanPSL2/)
@@ -46,4 +42,6 @@
 > https://github.com/omegat-org/omegat/blob/854b6b5a66a0306e5c27e74c0b5d656ed80b2bd4/src/org/omegat/core/machinetranslators/YandexTranslate.java
 > GoogleTranslateWithoutApiKey
 
-另外本彩云小译翻译插件代码也做了注释可以参考。
+另外本项目代码也做了注释可以参考。
+
+> 吐槽，升级到Gradle 8.3真是要吐了，一个构建工具升级一次版本就废弃一堆API，Gradle丝毫不考虑兼容性，开发是爽了，用户呢？
