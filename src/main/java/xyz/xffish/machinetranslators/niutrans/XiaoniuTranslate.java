@@ -21,14 +21,15 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import org.omegat.core.Core;
-import org.omegat.core.machinetranslators.BaseTranslate;
+import org.omegat.core.machinetranslators.BaseCachedTranslate;
 import org.omegat.gui.exttrans.MTConfigDialog;
 import org.omegat.util.Language;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import xyz.xffish.machinetranslators.niutrans.util.ErrorCode2Desc;
 import xyz.xffish.machinetranslators.niutrans.util.OLang2TLang;
 
-public class XiaoniuTranslate extends BaseTranslate {
+public class XiaoniuTranslate extends BaseCachedTranslate {
 
   /**
   * 设置存储 key 的名字，读取和设置值由 OmegaT 提供 API 来操作.
@@ -114,6 +115,7 @@ public class XiaoniuTranslate extends BaseTranslate {
     // U+2026 HORIZONTAL ELLIPSIS 水平省略号 …
     String lvShortText = text.length() > 5000 ? text.substring(0, 4997) + "\u2026" : text;
     String prev = getFromCache(sLang, tLang, lvShortText);
+    LOGGER.debug("判断的缓存结果是prev={}", prev);
     if (prev != null) {
       // 啊，有缓存，那就直接返回不用请求了
       LOGGER.debug("啊，有缓存，太美妙了：{}", prev);
@@ -162,13 +164,24 @@ public class XiaoniuTranslate extends BaseTranslate {
     LOGGER.debug("response body = {}", responseBody);
 
     JSONObject jsonObject = JSONUtil.parseObj(responseBody);
-    if (response.isOk()) {
-      translation = (String) jsonObject.getObj("tgt_text", "");
+    LOGGER.debug("response jsonobject error_code = {}", jsonObject.getStr("error_code","没有error_code"));
+    if (!jsonObject.containsKey("error_code")) {
+      translation = jsonObject.getStr("tgt_text", "[未能获取到输出]");
       // 把这次结果添加进缓存
       putToCache(sLang, tLang, lvShortText, translation);
     } else {
       // 出错描述直接写在 message 里，就不用专门的类转换错误码及其描述了
-      translation = (String) jsonObject.getObj("error_msg", "");
+//      translation = (String) jsonObject.getObj("error_msg", "");
+      String errorCode = jsonObject.getStr("error_code");
+
+      if (errorCode == null){
+        translation = "错误码null，没有错误描述信息";
+      }else{
+        final String errorCodeDesc = ErrorCode2Desc.translateErrorCode2Desc(errorCode);
+        // 下面写法也可
+//        final String errorCodeDesc = ErrorCode2Desc.INSTANCE.translateErrorCode2Desc(errorCode);
+        translation = errorCode + "-" + errorCodeDesc;
+      }
 
     }
 //    translation = URLUtil.decode(translation);

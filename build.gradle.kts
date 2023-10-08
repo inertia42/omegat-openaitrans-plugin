@@ -15,9 +15,10 @@ plugins {
 //    id("com.github.spotbugs") version "6.0.0-beta.3"
     java
 //    checkstyle
+    kotlin("jvm") version "1.9.10"
 
 }
-version = "0.2"
+version = "0.3"
 
 java {
     toolchain {
@@ -50,6 +51,7 @@ dependencies {
     implementation("cn.hutool:hutool-http:5.8.22")
     // https://mvnrepository.com/artifact/cn.hutool/hutool-crypto
     //compile group: 'cn.hutool', name: 'hutool-crypto', version: '5.4.0'
+//    implementation(kotlin("stdlib-jdk11"))
 
 }
 
