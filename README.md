@@ -16,7 +16,7 @@
 1. 申请一个小牛翻译apikey
 
     登录进[小牛翻译文档](https://niutrans.com/documents/contents/question/1)，申请开通小牛翻译 apikey（每日赠送 20 万字），也许需要等待一到两个工作日。
-2. 克隆本项目，进入项目根目录，然后运行`./gradlew build`。    
+2. 克隆本项目，进入项目根目录，然后运行`./gradlew clean uberJar`。
 3. 下载 releases 里的 zip，解压得到 jar 文件和别的插件一样放进 OmegaT 插件目录。这个目录默认应该在 OmegaT 安装目录下的`plugins`文件夹
 3. 打开 OmegaT，选项——首选项——机器翻译，选中`Xiaoniu Translate`，点击配置，然后填入第一步得到 apikey，最后勾选启用，点确定关闭首选项窗口。
 4. 没有第 4 步，做完上面 3 步，打开你的翻译项目，你应该能在机器翻译面板看到来自彩云小译的结果了。Enjoy it!
