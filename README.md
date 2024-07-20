@@ -1,5 +1,5 @@
 # OmegaT OpenAI Translation Plugin
-English|[简体中文](https://github.com/inertia42/omegat-openaitrans-plugin/blob/master/README_CN.md)
+ English | [简体中文](https://github.com/inertia42/omegat-openaitrans-plugin/blob/master/README_CN.md)
 
 Utilize OpenAI and Claude APIs for translation with the following features:
 * Supports multiple models
