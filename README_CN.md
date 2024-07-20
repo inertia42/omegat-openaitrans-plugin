@@ -35,3 +35,5 @@
 
 ## 许可证
 本项目采用GPL许可证。
+
+感谢[omegat-niutrans-plugin项目](https://github.com/xflcx1991/omegat-niutrans-plugin)，本项目部分代码 fork 自该项目。

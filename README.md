@@ -35,3 +35,5 @@ Some models may not have been tested; if you encounter any issues, please provid
 
 ## License
 This project is licensed under the GPL.
+
+Thanks to the [omegat-niutrans-plugin project](https://github.com/xflcx1991/omegat-niutrans-plugin), part of the code for this project was forked from that project.
