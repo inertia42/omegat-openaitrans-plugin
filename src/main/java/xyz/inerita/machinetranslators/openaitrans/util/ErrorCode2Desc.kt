@@ -1,4 +1,4 @@
-package xyz.xffish.machinetranslators.niutrans.util
+package xyz.inertia.machinetranslators.openaitrans.util
 
 /**
  * 错误码友好说明转换

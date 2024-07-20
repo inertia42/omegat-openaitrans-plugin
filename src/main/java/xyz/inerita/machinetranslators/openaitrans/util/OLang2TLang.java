@@ -1,4 +1,4 @@
-package xyz.xffish.machinetranslators.niutrans.util;
+package xyz.inertia.machinetranslators.openaitrans.util;
 
 import cn.hutool.core.map.MapUtil;
 import java.util.Map;
