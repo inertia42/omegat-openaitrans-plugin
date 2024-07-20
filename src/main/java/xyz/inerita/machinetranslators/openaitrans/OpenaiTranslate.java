@@ -106,11 +106,16 @@ public class OpenaiTranslate extends BaseCachedTranslate {
         double temperature = fullAccuracy.doubleValue();
 
         if (apiKey.isEmpty()) {
-            return url + " " + model + " " + temperature_str;
-            // return "Please set APIKEY!";
+            // return url + " " + model + " " + temperature_str;
+            return "Please set API KEY!";
         }
 
-        LOGGER.debug("apiKey = {}", apiKey);
+        if (url.isEmpty()) {
+            // return url + " " + model + " " + temperature_str;
+            return "Please set API URL!";
+        }
+
+        // LOGGER.debug("apiKey = {}", apiKey);
 
         List<String> openaiModelsList = Arrays.asList(openaiModels);
         List<String> claudeModelsList = Arrays.asList(claudeModels);
@@ -143,7 +148,6 @@ public class OpenaiTranslate extends BaseCachedTranslate {
         // U+2026 HORIZONTAL ELLIPSIS 水平省略号 …
         String lvShortText = text.length() > 5000 ? text.substring(0, 4997) + "\u2026" : text;
         String prev = getFromCache(sLang, tLang, lvShortText);
-        LOGGER.debug("判断的缓存结果是prev={}", prev);
         if (prev != null) {
             return prev;
         }
@@ -181,23 +185,23 @@ public class OpenaiTranslate extends BaseCachedTranslate {
             LOGGER.debug("response body = {}", responseBody);
 
             JSONObject jsonObject = JSONUtil.parseObj(responseBody);
-            LOGGER.debug("response jsonobject error_code = {}", jsonObject.getStr("error_code", "没有error_code"));
+            LOGGER.debug("response jsonobject error_code = {}", jsonObject.getStr("error_code", "no error_code"));
             if (!jsonObject.containsKey("error")) {
                 // 如果没有错误码，获取回复结果
                 JSONArray choices = jsonObject.getJSONArray("choices");
                 if (choices != null && !choices.isEmpty()) {
-                    result = choices.getJSONObject(0).getJSONObject("message").getStr("content", "[未能获取到输出]");
+                    result = choices.getJSONObject(0).getJSONObject("message").getStr("content", "[Cannot get output]");
                     putToCache(sLang, tLang, lvShortText, result);
                 } else {
-                    result = "[未能获取到输出]";
+                    result = "[Cannot get output]";
                 }
             } else {
                 // 如果有错误码，处理错误信息
                 final String error = jsonObject.getStr("error");
                 if (error == null) {
-                    result = "错误码null，没有错误描述信息";
+                    result = "error code null，no description";
                 } else {
-                    result = "错误: " + error;
+                    result = "error: " + error;
                 }
             }
         }
@@ -230,23 +234,23 @@ public class OpenaiTranslate extends BaseCachedTranslate {
             LOGGER.debug("response body = {}", responseBody);
 
             JSONObject jsonObject = JSONUtil.parseObj(responseBody);
-            LOGGER.debug("response jsonobject error_code = {}", jsonObject.getStr("error_code", "没有error_code"));
+            LOGGER.debug("response jsonobject error_code = {}", jsonObject.getStr("error_code", "no error_code"));
             if (!jsonObject.containsKey("error")) {
                 // 如果没有错误码，获取回复结果
                 JSONArray content = jsonObject.getJSONArray("content");
                 if (content != null && !content.isEmpty()) {
-                    result = content.getJSONObject(0).getStr("text", "[未能获取到输出]");
+                    result = content.getJSONObject(0).getStr("text", "[cannot get output]");
                     putToCache(sLang, tLang, lvShortText, result);
                 } else {
-                    result = "[未能获取到输出]";
+                    result = "[cannot get output]";
                 }
             } else {
                 // 如果有错误码，处理错误信息
                 final String error = jsonObject.getStr("error");
                 if (error == null) {
-                    result = "错误码null，没有错误描述信息";
+                    result = "error code null，no description";
                 } else {
-                    result = "错误: " + error;
+                    result = "error: " + error;
                 }
             }
         }
