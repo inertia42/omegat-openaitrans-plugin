@@ -29,16 +29,17 @@ import java.awt.*;
 import java.util.Map;
 import java.util.Arrays;
 import java.util.Collections;
-// import javax.swing.*;
+import javax.swing.*;
 
 public class OpenaiTranslate extends BaseCachedTranslate {
 
     /**
      * 设置存储 key 的名字，读取和设置值由 OmegaT 提供 API 来操作.
      */
-    private static final String PROPERTY_API_SECRET_KEY = "openai.api.secret.Key";
-    private static final String PROPERTY_API_ENDPOINT = "https://api.openai.com/v1/chat/completions";
+    private static final String PROPERTY_API_KEY = "openai.api.Key";
+    private static final String PROPERTY_API_URL = "openai.api.url";
     private static final String PROPERTY_API_MODEL = "openai.api.model";
+    private static final String PROPERTY_API_PROVIDER = "openai";
     /**
      * 官方API申请<br>
      * <a href="https://niutrans.com/documents/contents/question/1">...</a><br>
@@ -97,8 +98,8 @@ public class OpenaiTranslate extends BaseCachedTranslate {
      */
     @Override
     protected String translate(Language sLang, Language tLang, String text) throws Exception {
-        String apiKey = getCredential(PROPERTY_API_SECRET_KEY);
-        String endpoint = getCredential(PROPERTY_API_ENDPOINT);
+        String apiKey = getCredential(PROPERTY_API_KEY);
+        String endpoint = getCredential(PROPERTY_API_URL);
         String model = getCredential(PROPERTY_API_MODEL);
         String systemPrompt = "请将下面的与等离子体物理和核聚变相关的英语文本翻译成中文，要求用语专业准确，语言流畅通顺不拗口，符合中文的表达习惯又不偏离原意，符合信达雅的要求，在不改变原意的前提下可以对文本进行少量的润色，若句子过长可以适当将其分成短句。要求用语专业准确，语言流畅通顺不拗口，符合中文的表达习惯又不偏离原意，符合信达雅的要求。";
         if (apiKey.isEmpty()) {
@@ -216,6 +217,93 @@ public class OpenaiTranslate extends BaseCachedTranslate {
         return true;
     }
 
+    public class MTConfigDialog extends JDialog {
+        public JPanel panel;
+        public JTextField valueField1; // For apikey
+        public JTextField valueField2; // For url
+        public JComboBox<String> providerComboBox; // For service provider
+        public JComboBox<String> modelComboBox; // For model name
+        public JCheckBox temporaryCheckBox;
+
+        public MTConfigDialog(Window parent, String title) {
+            super(parent, title, ModalityType.APPLICATION_MODAL);
+            panel = new JPanel(new GridBagLayout());
+            valueField1 = new JTextField();
+            valueField2 = new JTextField();
+            providerComboBox = new JComboBox<>(new String[]{"OpenAI", "Claude"});
+            modelComboBox = new JComboBox<>(new String[]{"gpt-4o", "gpt-4", "gpt-4o-mini"});
+            temporaryCheckBox = new JCheckBox("Only for this session");
+
+            GridBagConstraints gbc = new GridBagConstraints();
+            gbc.insets = new Insets(5, 5, 5, 5); // Adding some padding
+
+            gbc.gridx = 0;
+            gbc.gridy = 0;
+            gbc.anchor = GridBagConstraints.EAST;
+            panel.add(new JLabel("apikey"), gbc);
+            
+            gbc.gridx = 1;
+            gbc.gridy = 0;
+            gbc.fill = GridBagConstraints.HORIZONTAL;
+            panel.add(valueField1, gbc);
+
+            gbc.gridx = 0;
+            gbc.gridy = 1;
+            gbc.fill = GridBagConstraints.NONE;
+            panel.add(new JLabel("url"), gbc);
+            
+            gbc.gridx = 1;
+            gbc.gridy = 1;
+            gbc.fill = GridBagConstraints.HORIZONTAL;
+            panel.add(valueField2, gbc);
+
+            gbc.gridx = 0;
+            gbc.gridy = 2;
+            gbc.fill = GridBagConstraints.NONE;
+            panel.add(new JLabel("Service Provider"), gbc);
+            
+            gbc.gridx = 1;
+            gbc.gridy = 2;
+            gbc.fill = GridBagConstraints.HORIZONTAL;
+            panel.add(providerComboBox, gbc);
+
+            gbc.gridx = 0;
+            gbc.gridy = 3;
+            gbc.fill = GridBagConstraints.NONE;
+            panel.add(new JLabel("Model Name"), gbc);
+            
+            gbc.gridx = 1;
+            gbc.gridy = 3;
+            gbc.fill = GridBagConstraints.HORIZONTAL;
+            panel.add(modelComboBox, gbc);
+
+            gbc.gridx = 0;
+            gbc.gridy = 4;
+            gbc.fill = GridBagConstraints.NONE;
+            panel.add(new JLabel(""), gbc);
+            
+            gbc.gridx = 1;
+            gbc.gridy = 4;
+            gbc.fill = GridBagConstraints.HORIZONTAL;
+            panel.add(temporaryCheckBox, gbc);
+
+            gbc.gridx = 1;
+            gbc.gridy = 5;
+            gbc.fill = GridBagConstraints.NONE;
+            JButton confirmButton = new JButton("Confirm");
+            confirmButton.addActionListener(e -> onConfirm());
+            panel.add(confirmButton, gbc);
+
+            add(panel);
+            pack();
+            setLocationRelativeTo(parent);
+        }
+
+        protected void onConfirm() {
+        // Placeholder for child class to implement
+        }
+    }
+
     /**
      * 设置里面该插件的配置按钮被按下后弹出的界面、控制逻辑、获取数据，存储数据
      */
@@ -224,36 +312,43 @@ public class OpenaiTranslate extends BaseCachedTranslate {
         MTConfigDialog dialog = new MTConfigDialog(parent, getName()) {
             @Override
             protected void onConfirm() {
-                String endpoint = panel.valueField1.getText().trim();
-                String key = panel.valueField2.getText().trim();
-                // String model = panel.valueField3.getText().trim();
-                String model = "gpt-4o";
-                boolean temporary = panel.temporaryCheckBox.isSelected();
-                // 利用 OmegaT 提供的 API 来设置 PROPERTY_API_SECRET_KEY 变量代表的名字的值
-                // 可以想象 OmegaT 提供了一个类似 HashMap 的结构，
-                // setCredential 就是用指定 key 存储值，getCredential 就是用指定 key 取值
-                // 第三个参数是是否启用“仅为本次会话保存”
-                setCredential(PROPERTY_API_ENDPOINT, endpoint, temporary);
-                setCredential(PROPERTY_API_SECRET_KEY, key, temporary);
+                String key = valueField1.getText().trim();
+                String url = valueField2.getText().trim();
+                String provider = (String) providerComboBox.getSelectedItem();
+                String model = (String) modelComboBox.getSelectedItem();
+                boolean temporary = temporaryCheckBox.isSelected();
+
+                setCredential(PROPERTY_API_KEY, key, temporary);
+                setCredential(PROPERTY_API_URL, url, temporary);
+                setCredential(PROPERTY_API_PROVIDER, provider, temporary);
                 setCredential(PROPERTY_API_MODEL, model, temporary);
             }
         };
-        dialog.panel.valueLabel1.setText("endpoint");
-        dialog.panel.valueField1.setText(getCredential(PROPERTY_API_ENDPOINT));
-        // 弹出 Token 设置窗口的 label 显示的文字
-        dialog.panel.valueLabel2.setText("apikey");
-        // 利用 OmegaT 提供的 API 来获取 PROPERTY_API_SECRET_KEY 变量代表的名字的值
-        dialog.panel.valueField2.setText(getCredential(PROPERTY_API_SECRET_KEY));
-        // dialog.panel.valueLabel3.setText("model");
-        // dialog.panel.valueField3.setText(getCredential(PROPERTY_API_MODEL));
-        // 只有一个内容要填，所以把第二个 label 和 输入框禁用。如果有个两个内容要填，比如腾讯翻译插件：secretId 和 scretKey，
-        // 那下面的代码就不能设置 setVisible(false) 了，具体写法可参考 https://github.com/yoyicue/omegat-tencent-plugin
-        // dialog.panel.valueLabel2.setVisible(false);
-        // dialog.panel.valueField2.setVisible(false);
 
-        // 设置是否勾选“仅为本次会话保存”。
-        dialog.panel.temporaryCheckBox.setSelected(
-                isCredentialStoredTemporarily(PROPERTY_API_SECRET_KEY));
-        dialog.show();
+        // Set initial values for the fields
+        dialog.valueField1.setText(getCredential(PROPERTY_API_KEY));
+        String provider = getCredential(PROPERTY_API_PROVIDER);
+        String defaultUrl = getDefaultUrlForProvider(provider);
+        String url = getCredential(PROPERTY_API_URL);
+        if (url == null || url.isEmpty()) {
+            url = defaultUrl;
+        }
+        dialog.valueField2.setText(url);
+        dialog.providerComboBox.setSelectedItem(provider);
+        dialog.modelComboBox.setSelectedItem(getCredential(PROPERTY_API_MODEL));
+        dialog.temporaryCheckBox.setSelected(isCredentialStoredTemporarily(PROPERTY_API_KEY));
+
+        dialog.setVisible(true);
+    }
+
+    private String getDefaultUrlForProvider(String provider) {
+        switch (provider) {
+            case "OpenAI":
+                return "https://api.openai.com";
+            case "Claude":
+                return "https://api.provider2.com";
+            default:
+                return "";
+        }
     }
 }
