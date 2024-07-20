@@ -311,7 +311,7 @@ public class OpenaiTranslate extends BaseCachedTranslate {
             gbc.gridx = 0;
             gbc.gridy = 1;
             gbc.fill = GridBagConstraints.NONE;
-            panel.add(new JLabel("Url(like https://api.openai.com)"), gbc);
+            panel.add(new JLabel("URL(like https://api.openai.com)"), gbc);
             
             gbc.gridx = 1;
             gbc.gridy = 1;
