@@ -1,4 +1,6 @@
 # OmegaT OpenAI 翻译插件
+简体中文|[English](https://github.com/inertia42/omegat-openaitrans-plugin/blob/master/README.md)
+
 调用 OpenAI 及 Claude API 进行翻译，有如下功能
 * 支持多个模型
 * 支持修改 API URL
