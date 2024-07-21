@@ -42,6 +42,7 @@ public class OpenaiTranslate extends BaseCachedTranslate {
     private static final String PROPERTY_API_MODEL = "openai.api.model";
     private static final String PROPERTY_API_PROMPT = "openai.api.prompt";
     private static final String PROPERTY_API_TEMPERATURE = "openai.api.temperature";
+    private static final String PROPERTY_API_CACHE = "openai.api.enable.cache";
 
     private static final String[] openaiModels = {"gpt-4o", "gpt-4o-mini", "gpt-4", "gpt-4-turbo", "gpt-3.5-turbo", "gpt-3.5"};
     private static final String[] claudeModels = {"claude-3-opus", "claude-3-5-sonnet", "claude-3-sonnet", "claude-3-haiku"};
@@ -100,6 +101,7 @@ public class OpenaiTranslate extends BaseCachedTranslate {
         String temperature_str = getCredential(PROPERTY_API_TEMPERATURE);
         String provider = "";
         String prompt = getCredential(PROPERTY_API_PROMPT);
+        String enableCache= getCredential(PROPERTY_API_CACHE);
 
         BigDecimal fullAccuracy = new BigDecimal(Double.parseDouble(temperature_str));
         fullAccuracy = fullAccuracy.setScale(3, RoundingMode.DOWN); // 截断到三位小数
@@ -148,7 +150,7 @@ public class OpenaiTranslate extends BaseCachedTranslate {
         // U+2026 HORIZONTAL ELLIPSIS 水平省略号 …
         String lvShortText = text.length() > 5000 ? text.substring(0, 4997) + "\u2026" : text;
         String prev = getFromCache(sLang, tLang, lvShortText);
-        if (prev != null) {
+        if (prev != null && enableCache == "true") {
             return prev;
         }
 
@@ -275,6 +277,7 @@ public class OpenaiTranslate extends BaseCachedTranslate {
         public JComboBox<String> providerComboBox; // For service provider
         public JComboBox<String> modelComboBox; // For model name
         public JCheckBox temporaryCheckBox;
+        public JCheckBox cacheCheckBox;
 
         public MTConfigDialog(Window parent, String title) {
             super(parent, title, ModalityType.APPLICATION_MODAL);
@@ -294,6 +297,7 @@ public class OpenaiTranslate extends BaseCachedTranslate {
             // providerComboBox = new JComboBox<>(new String[]{"OpenAI", "Claude"});
             modelComboBox = new JComboBox<>(combinedModels);
             temporaryCheckBox = new JCheckBox("Only for this session");
+            cacheCheckBox = new JCheckBox("Enable caching", true);
 
             GridBagConstraints gbc = new GridBagConstraints();
             gbc.insets = new Insets(5, 5, 5, 5); // Adding some padding
@@ -358,8 +362,18 @@ public class OpenaiTranslate extends BaseCachedTranslate {
             gbc.fill = GridBagConstraints.HORIZONTAL;
             panel.add(temporaryCheckBox, gbc);
 
+            gbc.gridx = 0;
+            gbc.gridy = 6;
+            gbc.fill = GridBagConstraints.NONE;
+            panel.add(new JLabel(""), gbc);
+            
             gbc.gridx = 1;
             gbc.gridy = 6;
+            gbc.fill = GridBagConstraints.HORIZONTAL;
+            panel.add(cacheCheckBox, gbc);
+
+            gbc.gridx = 1;
+            gbc.gridy = 7;
             gbc.fill = GridBagConstraints.NONE;
             JButton confirmButton = new JButton("Confirm");
             confirmButton.addActionListener(e -> onConfirm());
@@ -389,12 +403,14 @@ public class OpenaiTranslate extends BaseCachedTranslate {
                 String temperature = valueField4.getText().trim();
                 String model = (String) modelComboBox.getSelectedItem();
                 boolean temporary = temporaryCheckBox.isSelected();
+                String cache = Boolean.toString(cacheCheckBox.isSelected());
 
                 setCredential(PROPERTY_API_KEY, key, temporary);
                 setCredential(PROPERTY_API_URL, url, temporary);
                 setCredential(PROPERTY_API_PROMPT, prompt, temporary);
                 setCredential(PROPERTY_API_TEMPERATURE, temperature, temporary);
                 setCredential(PROPERTY_API_MODEL, model, temporary);
+                setCredential(PROPERTY_API_CACHE, cache, temporary);
             }
         };
 
