@@ -45,7 +45,9 @@ public class OpenaiTranslate extends BaseCachedTranslate {
     private static final String PROPERTY_API_CACHE = "openai.api.enable.cache";
 
     private static final String[] openaiModels = {"gpt-4o", "gpt-4o-mini", "gpt-4", "gpt-4-turbo", "gpt-3.5-turbo", "gpt-3.5"};
-    private static final String[] claudeModels = {"claude-3-opus", "claude-3-5-sonnet", "claude-3-sonnet", "claude-3-haiku"};
+    private static final String[] claudeModels = {"claude-3-opus", "claude-3-5-sonnet", "claude-3-sonnet", "claude-3-haiku", "claude-3-5-sonnet-20240620"};
+    private static final String[] Providers = {"default", "OpenAI", "Claude"};
+
 
     private static final Logger LOGGER = LoggerFactory.getLogger(OpenaiTranslate.class);
 
@@ -99,7 +101,7 @@ public class OpenaiTranslate extends BaseCachedTranslate {
         String url = getCredential(PROPERTY_API_URL);
         String model = getCredential(PROPERTY_API_MODEL);
         String temperature_str = getCredential(PROPERTY_API_TEMPERATURE);
-        String provider = "";
+        String provider = getCredential(PROPERTY_API_PROVIDER);
         String prompt = getCredential(PROPERTY_API_PROMPT);
         String enableCache= getCredential(PROPERTY_API_CACHE);
 
@@ -123,17 +125,24 @@ public class OpenaiTranslate extends BaseCachedTranslate {
         List<String> claudeModelsList = Arrays.asList(claudeModels);
 
         if (openaiModelsList.contains(model)) {
-            provider = "OpenAI";
-            url += "/v1/chat/completions";
+            provider = (provider == "default") ? "OpenAI" : provider;
+            // url += "/v1/chat/completions";
         } 
         // 检查 model 是否在 claudeModels 中
         else if (claudeModelsList.contains(model)) {
-            provider = "Claude";
-            url += "/v1/messages";
+            provider = (provider == "default") ? "Claude" : provider;
+            // url += "/v1/messages";
         } 
         // 如果 model 不在任何一个列表中
         else {
             return "An unsupported model was used!";
+        }
+
+        if (provider == "OpenAI") {
+            url += "/v1/chat/completions";
+        }
+        else if (provider == "Claude") {
+            url += "/v1/messages";
         }
 
         //     -----------------转换语言代码-----------------
@@ -276,6 +285,7 @@ public class OpenaiTranslate extends BaseCachedTranslate {
         public JTextField valueField4; // For temperature
         public JComboBox<String> providerComboBox; // For service provider
         public JComboBox<String> modelComboBox; // For model name
+        public JComboBox<String> apiComboBox; // For Api format
         public JCheckBox temporaryCheckBox;
         public JCheckBox cacheCheckBox;
 
@@ -296,6 +306,7 @@ public class OpenaiTranslate extends BaseCachedTranslate {
             System.arraycopy(claudeModels, 0, combinedModels, openaiModels.length, claudeModels.length);
             // providerComboBox = new JComboBox<>(new String[]{"OpenAI", "Claude"});
             modelComboBox = new JComboBox<>(combinedModels);
+            apiComboBox = new JComboBox<>(Providers);
             temporaryCheckBox = new JCheckBox("Only for this session");
             cacheCheckBox = new JCheckBox("Enable caching", true);
 
@@ -355,12 +366,12 @@ public class OpenaiTranslate extends BaseCachedTranslate {
             gbc.gridx = 0;
             gbc.gridy = 5;
             gbc.fill = GridBagConstraints.NONE;
-            panel.add(new JLabel(""), gbc);
+            panel.add(new JLabel("API format"), gbc);
             
             gbc.gridx = 1;
             gbc.gridy = 5;
             gbc.fill = GridBagConstraints.HORIZONTAL;
-            panel.add(temporaryCheckBox, gbc);
+            panel.add(apiComboBox, gbc);
 
             gbc.gridx = 0;
             gbc.gridy = 6;
@@ -370,10 +381,20 @@ public class OpenaiTranslate extends BaseCachedTranslate {
             gbc.gridx = 1;
             gbc.gridy = 6;
             gbc.fill = GridBagConstraints.HORIZONTAL;
+            panel.add(temporaryCheckBox, gbc);
+
+            gbc.gridx = 0;
+            gbc.gridy = 7;
+            gbc.fill = GridBagConstraints.NONE;
+            panel.add(new JLabel(""), gbc);
+            
+            gbc.gridx = 1;
+            gbc.gridy = 7;
+            gbc.fill = GridBagConstraints.HORIZONTAL;
             panel.add(cacheCheckBox, gbc);
 
             gbc.gridx = 1;
-            gbc.gridy = 7;
+            gbc.gridy = 8;
             gbc.fill = GridBagConstraints.NONE;
             JButton confirmButton = new JButton("Confirm");
             confirmButton.addActionListener(e -> onConfirm());
@@ -402,6 +423,7 @@ public class OpenaiTranslate extends BaseCachedTranslate {
                 String prompt = valueField3.getText().trim();
                 String temperature = valueField4.getText().trim();
                 String model = (String) modelComboBox.getSelectedItem();
+                String provider = (String) apiComboBox.getSelectedItem();
                 boolean temporary = temporaryCheckBox.isSelected();
                 String cache = Boolean.toString(cacheCheckBox.isSelected());
 
@@ -410,6 +432,7 @@ public class OpenaiTranslate extends BaseCachedTranslate {
                 setCredential(PROPERTY_API_PROMPT, prompt, temporary);
                 setCredential(PROPERTY_API_TEMPERATURE, temperature, temporary);
                 setCredential(PROPERTY_API_MODEL, model, temporary);
+                setCredential(PROPERTY_API_PROVIDER, provider, temporary);
                 setCredential(PROPERTY_API_CACHE, cache, temporary);
             }
         };
@@ -431,6 +454,7 @@ public class OpenaiTranslate extends BaseCachedTranslate {
         dialog.valueField4.setText(temperature);
         // dialog.providerComboBox.setSelectedItem(provider);
         dialog.modelComboBox.setSelectedItem(getCredential(PROPERTY_API_MODEL));
+        dialog.apiComboBox.setSelectedItem(getCredential(PROPERTY_API_PROVIDER));
         dialog.temporaryCheckBox.setSelected(isCredentialStoredTemporarily(PROPERTY_API_KEY));
 
         dialog.setVisible(true);
