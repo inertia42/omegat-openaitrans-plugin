@@ -40,6 +40,7 @@ public class OpenaiTranslate extends BaseCachedTranslate {
     private static final String PROPERTY_API_KEY = "openai.api.Key";
     private static final String PROPERTY_API_URL = "openai.api.url";
     private static final String PROPERTY_API_MODEL = "openai.api.model";
+    private static final String PROPERTY_API_PROVIDER = "openai.api.format";
     private static final String PROPERTY_API_PROMPT = "openai.api.prompt";
     private static final String PROPERTY_API_TEMPERATURE = "openai.api.temperature";
     private static final String PROPERTY_API_CACHE = "openai.api.enable.cache";
