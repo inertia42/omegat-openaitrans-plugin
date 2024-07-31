@@ -14,8 +14,9 @@ Utilize OpenAI and Claude APIs for translation with the following features:
 3. (Required) Fill in the corresponding URL in the `URL` field.
 4. (Optional) Enter a custom prompt in the `Prompt` box if needed. If you choose to customize, automatic language detection will be disabled, and you will need to specify the target language in the prompt. If left blank, the target language will be set automatically.
 5. (Optional) Modify the `temperature`, which is set to 0 by default.
-6. Select the model you wish to use.
-7. Finally, check Enable, click OK, and close the Preferences window.
+6. (Optional) Modify the 'API format'. Some service providers offer Claude models using OpenAI's API format. If you don't understand this option, please don't change the default setting. In this case, the API format will be automatically determined based on the selected model. The default setting is 'default'.
+7. Select the model you wish to use.
+8. Finally, check Enable, click Confirm, and close the Preferences window.
 
 ## Currently Supported Models
 The following models are currently supported:
@@ -32,6 +33,7 @@ The following models are currently supported:
 | claude-3-5-sonnet | Claude   |
 | claude-3-sonnet   | Claude   |
 | claude-3-haiku    | Claude   |
+| claude-3-5-sonnet-20240620 | Claude   |
 
 Some models may not have been tested; if you encounter any issues, please provide feedback through the issues section. If you need additional models, please also provide feedback through the issues section.
 
