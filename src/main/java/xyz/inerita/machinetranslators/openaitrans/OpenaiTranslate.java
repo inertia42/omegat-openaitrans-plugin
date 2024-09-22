@@ -237,6 +237,7 @@ public class OpenaiTranslate extends BaseCachedTranslate {
             HttpRequest post = HttpUtil.createPost(url)
                     .header("x-api-key", apiKey)
                     .header("Content-Type", "application/json")
+                    .header("anthropic-version", "2023-06-01")
                     .body(bodyStr);
 
             HttpResponse response = post.execute();
