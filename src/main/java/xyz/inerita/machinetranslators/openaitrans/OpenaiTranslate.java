@@ -159,7 +159,7 @@ public class OpenaiTranslate extends BaseCachedTranslate {
         //判断翻译缓存里有没有
         // U+2026 HORIZONTAL ELLIPSIS 水平省略号 …
         String lvShortText = text.length() > 5000 ? text.substring(0, 4997) + "\u2026" : text;
-        String prev = getFromCache(sLang, tLang, lvShortText);
+        String prev = getCachedTranslation(sLang, tLang, lvShortText);
         if (prev != null && enableCache == "true") {
             return prev;
         }
