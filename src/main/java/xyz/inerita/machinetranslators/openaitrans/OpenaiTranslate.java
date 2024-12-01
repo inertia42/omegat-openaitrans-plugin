@@ -46,7 +46,7 @@ public class OpenaiTranslate extends BaseCachedTranslate {
     private static final String PROPERTY_API_CACHE = "openai.api.enable.cache";
 
     private static final String[] openaiModels = {"gpt-4o", "gpt-4o-mini", "gpt-4", "gpt-4-turbo", "gpt-3.5-turbo", "gpt-3.5"};
-    private static final String[] claudeModels = {"claude-3-opus", "claude-3-5-sonnet", "claude-3-sonnet", "claude-3-haiku", "claude-3-5-sonnet-20240620"};
+    private static final String[] claudeModels = {"claude-3-opus-20240229", "claude-3-5-sonnet-20240620", "claude-3-5-sonnet-20241022", "claude-3-sonnet-20240229", "claude-3-5-haiku-20241022", "claude-3-haiku-20240307"};
     private static final String[] Providers = {"default", "OpenAI", "Claude"};
 
 
@@ -236,8 +236,8 @@ public class OpenaiTranslate extends BaseCachedTranslate {
 
             HttpRequest post = HttpUtil.createPost(url)
                     .header("x-api-key", apiKey)
-                    .header("Content-Type", "application/json")
                     .header("anthropic-version", "2023-06-01")
+                    .header("Content-Type", "application/json")
                     .body(bodyStr);
 
             HttpResponse response = post.execute();
