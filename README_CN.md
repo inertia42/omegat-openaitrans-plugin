@@ -29,11 +29,12 @@
 | gpt-4-turbo       | OpenAI |
 | gpt-3.5-turbo     | OpenAI |
 | gpt-3.5           | OpenAI |
-| claude-3-opus     | Claude |
-| claude-3-5-sonnet | Claude |
-| claude-3-sonnet   | Claude |
-| claude-3-haiku    | Claude |
+| claude-3-opus-20240229     | Claude   |
 | claude-3-5-sonnet-20240620 | Claude   |
+| claude-3-5-sonnet-20241022 | Claude   |
+| claude-3-sonnet-20240229   | Claude   |
+| claude-3-5-haiku-20241022  | Claude   |
+| claude-3-haiku-20240307    | Claude   |
 
 其中部分模型可能未经测试，如果问题请通过 issue 反馈。如有需要添加的模型，也请通过 issue 反馈。
 
