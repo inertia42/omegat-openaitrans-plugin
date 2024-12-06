@@ -1,24 +1,44 @@
-
-
-
-repositories {
-    maven {
-        url=uri("https://www.jitpack.io")
-    }
-    mavenCentral()
-}
-
-
+import org.gradle.crypto.checksum.Checksum
+import java.io.FileInputStream
+import java.util.*
 
 plugins {
-//    id("io.beekeeper.gradle.plugin") version "0.15.0"
-//    id("com.github.spotbugs") version "6.0.0-beta.3"
     java
-//    checkstyle
-    kotlin("jvm") version "1.9.10"
-
+    signing
+    distribution
+    id("org.gradle.crypto.checksum") version "1.4.0"
+    id("com.diffplug.spotless") version "6.12.0"
+    id("org.omegat.gradle") version "2.0.0-rc2"
+    id("com.palantir.git-version") version "3.0.0" apply false
 }
-version = "1.2.2"
+
+val dotgit = project.file(".git")
+if (dotgit.exists()) {
+    apply(plugin = "com.palantir.git-version")
+    val versionDetails: groovy.lang.Closure<com.palantir.gradle.gitversion.VersionDetails> by extra
+    val details = versionDetails()
+    val baseVersion = details.lastTag.substring(1)
+    version = when {
+        details.isCleanTag -> baseVersion
+        else -> baseVersion + "-" + details.commitDistance + "-" + details.gitHash + "-SNAPSHOT"
+    }
+} else {
+    val gitArchival = project.file(".git-archival.properties")
+    val props = Properties()
+    props.load(FileInputStream(gitArchival))
+    val versionDescribe = props.getProperty("describe")
+    val regex = "^v\\d+\\.\\d+\\.\\d+$".toRegex()
+    version = when {
+        regex.matches(versionDescribe) -> versionDescribe.substring(1)
+        else -> versionDescribe.substring(1) + "-SNAPSHOT"
+    }
+}
+
+omegat {
+    version = "6.0.0"
+    pluginClass = "xyz.inertia.machinetranslators.openaitrans.OpenaiTranslate"
+    packIntoJarFileFilter = {it.exclude("META-INF/**/*", "module-info.class", "kotlin/**/*")}
+}
 
 java {
     toolchain {
@@ -26,148 +46,81 @@ java {
     }
 }
 
-
 dependencies {
-    //no compile,because slf4j-api is included in OmegaT ifself
-    compileOnly("org.slf4j:slf4j-api:1.7.25")
-
-    compileOnly("org.omegat:omegat:6.0.0")
-    compileOnly("commons-io:commons-io:2.7")
-    compileOnly("commons-lang:commons-lang:2.6")
-    // no need.We can use slf4j-jdk14 which is included by "org.omegat:omegat:4.3.0"
-//    provided 'org.slf4j:slf4j-nop:1.7.21'
-    testImplementation("junit:junit:4.13.1")
-
-    //testCompile 'xmlunit:xmlunit:1.6'
-    //testCompile 'org.madlonkay.supertmxmerge:supertmxmerge:2.0.1'
-
-    //testCompile 'org.apache.logging.log4j:log4j-api:2.13.3'
-    //testCompile 'org.apache.logging.log4j:log4j-core:2.13.3'
-//    testCompile 'org.apache.logging.log4j:log4j-slf4j-impl:2.13.3'
-
-    // https://mvnrepository.com/artifact/cn.hutool/hutool-json
-    implementation("cn.hutool:hutool-json:5.8.22")
-    // https://mvnrepository.com/artifact/cn.hutool/hutool-http
-    implementation("cn.hutool:hutool-http:5.8.22")
-    // https://mvnrepository.com/artifact/cn.hutool/hutool-crypto
-    //compile group: 'cn.hutool', name: 'hutool-crypto', version: '5.4.0'
-//    implementation(kotlin("stdlib-jdk11"))
-
+    packIntoJar("org.slf4j:slf4j-api:2.0.7")
+    implementation("commons-io:commons-io:2.7")
+    implementation("commons-lang:commons-lang:2.6")
+    packIntoJar("cn.hutool:hutool-json:5.8.22")
+    packIntoJar("cn.hutool:hutool-http:5.8.22")
+    testImplementation("junit:junit:4.13")
 }
 
-
-//test.useTestNG()
-
-tasks.withType<JavaCompile>().configureEach {
-    options.compilerArgs = listOf("-Xlint:deprecation","-Xlint:unchecked")
-    options.encoding = "UTF-8"
-    options.release = 11
-}
-
-////checkstyle
-//tasks.withType<Checkstyle>().configureEach{
-//        reports{
-//            xml.required.set(false)
-//            html.required.set(true)
-//            html.stylesheet = resources.text.fromFile("${rootProject.projectDir}/config/checkstyle/google_checks.xml")
-//
-//        }
-//
-//}
-
-
-
-// Build FatJar
-//
-// It is easy to install a 3rd-party OmegaT plugin which is
-// a single jar file, because all user should do is just to put the jar
-// file into plugins directory.
-
-//tasks.jar
-//task.withType<jar>().configureEach{
-//
-//    // make gradle5 compatible
-////    from files(sourceSets.main.output.classesDir)
-////    from sourceSets.main.output.classesDirs
-//    from sourceSets.main.output
-//            dependsOn configurations.runtimeClasspath
-//            from { configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it)  } }
-////            {
-////        exclude 'META-INF/MANIFEST.MF'
-////    }
-//    manifest {
-//        // plugin's main class name is defined in gradle.properties file.
-//        attributes("OmegaT-Plugins": pluginMainClass)
-//    }
-//    duplicatesStrategy "exclude"
-//}
-
-tasks.register<Jar>("uberJar") {
-//    archiveClassifier.set("uber")
-    println(sourceSets.main.get().output)
-    from(sourceSets.main.get().output)
-
-    dependsOn(configurations.runtimeClasspath)
-    from({
-        configurations.runtimeClasspath.get().filter { it.name.endsWith("jar") }.map { zipTree(it) }
-    })
-    manifest {
-        // plugin's main class name is defined in gradle.properties file.
-        attributes("OmegaT-Plugins" to providers.gradleProperty("pluginMainClass"))
+distributions {
+    main {
+        contents {
+            from(tasks["jar"], "README.md", "COPYING", "CHANGELOG.md")
+        }
     }
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+val signKey = listOf("signingKey", "signing.keyId", "signing.gnupg.keyName").find {project.hasProperty(it)}
+tasks.withType<Sign> {
+    onlyIf { signKey != null }
+}
+
+signing {
+    when (signKey) {
+        "signingKey" -> {
+            val signingKey: String? by project
+            val signingPassword: String? by project
+            useInMemoryPgpKeys(signingKey, signingPassword)
+        }
+
+        "signing.keyId" -> {/* do nothing */
+        }
+
+        "signing.gnupg.keyName" -> {
+            useGpgCmd()
+        }
+    }
+    sign(tasks.distZip.get())
+    sign(tasks.jar.get())
+}
+
+val jar by tasks.getting(Jar::class) {
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+}
+
+spotless {
+    java {
+        target(listOf("src/*/java/**/*.java"))
+        removeUnusedImports()
+        palantirJavaFormat()
+        importOrder("org.omegat", "java", "javax", "", "\\#")
+    }
 }
 
 
-
-// Hack for IntelliJ IDEA
-//idea {
-//    module {
-//        testSourceDirs += file('src/integration-test/java')
-//    }
-//}
-
-//javadoc {
-//    classpath += configurations.provided
-//    options{
-//        encoding 'UTF-8'
-////        charSet 'UTF-8'
-//    }
-////    options.locale = 'en_US'
-////    options.encoding = 'UTF-8'
-////    options.charSet = 'UTF-8'
-////    options.links 'http://docs.oracle.com/javase/17/docs/api'
-//}
-
-//tasks.register('myJavadocs', Javadoc) {
-//    source = sourceSets.main.allJava
-//    classpath += configurations.provided
-//    options.locale = 'en_US'
-//    author true
-//    options.addStringOption('encoding','UTF-8')
-//    options.docletpath = configurations.jaxDoclet.files.asType(List)
-//    options.encoding = 'UTF-8'
-//    options.charSet = 'UTF-8'
-//    options.links 'http://docs.oracle.com/javase/17/docs/api'
-//}
-/*
-groovydoc {
-    classpath += configurations.provided
+tasks.register<Checksum>("createChecksums") {
+    dependsOn(tasks.distZip)
+    inputFiles.setFrom(listOf(tasks.jar.get(), tasks.distZip.get()))
+    outputDirectory.set(layout.buildDirectory.dir("distributions"))
+    checksumAlgorithm.set(Checksum.Algorithm.SHA512)
+    appendFileNameToChecksum.set(true)
 }
-*/
 
-//tasks.register('javadocJar', Jar) {
-//    dependsOn javadoc
-//            archiveClassifier = 'javadoc'
-//    from javadoc.destinationDir
-//}
+tasks.withType<JavaCompile> {
+    options.encoding = "UTF-8"
+}
 
+tasks.withType<Javadoc> {
+    options.encoding = "UTF-8"
+}
 
-//artifacts {
-//    archives jar
-//            archives sourceJar
-//            archives javadocJar
-//}
+tasks.withType<Test> {
+    systemProperty("file.encoding", "UTF-8")
+}
 
-
-
+tasks.withType<ProcessResources> {
+    filteringCharset = "UTF-8"
+}

@@ -8,29 +8,29 @@ omegat-niutrans-plugin
  */
 package xyz.inertia.machinetranslators.openaitrans;
 
-import cn.hutool.core.map.MapUtil;
-import cn.hutool.http.Header;
-import cn.hutool.http.HttpRequest;
-import cn.hutool.http.HttpResponse;
-import cn.hutool.http.HttpUtil;
-import cn.hutool.json.JSONObject;
-import cn.hutool.json.JSONUtil;
-import cn.hutool.json.JSONArray;
 import org.omegat.core.Core;
 import org.omegat.core.machinetranslators.BaseCachedTranslate;
 import org.omegat.gui.exttrans.MTConfigDialog;
 import org.omegat.util.Language;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.awt.*;
-import java.util.Map;
-import java.util.List;
-import java.util.Arrays;
-import java.util.Collections;
-import javax.swing.*;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+
+import javax.swing.*;
+
+import cn.hutool.core.map.MapUtil;
+import cn.hutool.http.HttpRequest;
+import cn.hutool.http.HttpResponse;
+import cn.hutool.http.HttpUtil;
+import cn.hutool.json.JSONArray;
+import cn.hutool.json.JSONObject;
+import cn.hutool.json.JSONUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class OpenaiTranslate extends BaseCachedTranslate {
 
@@ -38,6 +38,7 @@ public class OpenaiTranslate extends BaseCachedTranslate {
      * 设置存储 key 的名字，读取和设置值由 OmegaT 提供 API 来操作.
      */
     private static final String PROPERTY_API_KEY = "openai.api.Key";
+
     private static final String PROPERTY_API_URL = "openai.api.url";
     private static final String PROPERTY_API_MODEL = "openai.api.model";
     private static final String PROPERTY_API_PROVIDER = "openai.api.format";
@@ -45,14 +46,21 @@ public class OpenaiTranslate extends BaseCachedTranslate {
     private static final String PROPERTY_API_TEMPERATURE = "openai.api.temperature";
     private static final String PROPERTY_API_CACHE = "openai.api.enable.cache";
 
-    private static final String[] openaiModels = {"gpt-4o", "gpt-4o-mini", "gpt-4", "gpt-4-turbo", "gpt-3.5-turbo", "gpt-3.5"};
-    private static final String[] claudeModels = {"claude-3-opus-20240229", "claude-3-5-sonnet-20240620", "claude-3-5-sonnet-20241022", "claude-3-sonnet-20240229", "claude-3-5-haiku-20241022", "claude-3-haiku-20240307"};
+    private static final String[] openaiModels = {
+        "gpt-4o", "gpt-4o-mini", "gpt-4", "gpt-4-turbo", "gpt-3.5-turbo", "gpt-3.5"
+    };
+    private static final String[] claudeModels = {
+        "claude-3-opus-20240229",
+        "claude-3-5-sonnet-20240620",
+        "claude-3-5-sonnet-20241022",
+        "claude-3-sonnet-20240229",
+        "claude-3-5-haiku-20241022",
+        "claude-3-haiku-20240307"
+    };
     private static final String[] Providers = {"default", "OpenAI", "Claude"};
-
 
     private static final Logger LOGGER = LoggerFactory.getLogger(OpenaiTranslate.class);
 
-    
     /**
      * 在软件启动时会自动调用该函数来注册插件.
      */
@@ -64,8 +72,7 @@ public class OpenaiTranslate extends BaseCachedTranslate {
     /**
      * 卸载插件，可以留空，示例代码就留空.
      */
-    public static void unloadPlugins() {
-    }
+    public static void unloadPlugins() {}
 
     /**
      * 显示该插件介绍性的话.
@@ -84,7 +91,7 @@ public class OpenaiTranslate extends BaseCachedTranslate {
      */
     @Override
     public String getName() {
-        return "LLM Translate";
+        return "Openai Translate";
     }
 
     /**
@@ -104,7 +111,7 @@ public class OpenaiTranslate extends BaseCachedTranslate {
         String temperature_str = getCredential(PROPERTY_API_TEMPERATURE);
         String provider = getCredential(PROPERTY_API_PROVIDER);
         String prompt = getCredential(PROPERTY_API_PROMPT);
-        String enableCache= getCredential(PROPERTY_API_CACHE);
+        String enableCache = getCredential(PROPERTY_API_CACHE);
 
         BigDecimal fullAccuracy = new BigDecimal(Double.parseDouble(temperature_str));
         fullAccuracy = fullAccuracy.setScale(3, RoundingMode.DOWN); // 截断到三位小数
@@ -128,12 +135,12 @@ public class OpenaiTranslate extends BaseCachedTranslate {
         if (openaiModelsList.contains(model)) {
             provider = (provider == "default") ? "OpenAI" : provider;
             // url += "/v1/chat/completions";
-        } 
+        }
         // 检查 model 是否在 claudeModels 中
         else if (claudeModelsList.contains(model)) {
             provider = (provider == "default") ? "Claude" : provider;
             // url += "/v1/messages";
-        } 
+        }
         // 如果 model 不在任何一个列表中
         else {
             return "An unsupported model was used!";
@@ -141,8 +148,7 @@ public class OpenaiTranslate extends BaseCachedTranslate {
 
         if (provider == "OpenAI") {
             url += "/v1/chat/completions";
-        }
-        else if (provider == "Claude") {
+        } else if (provider == "Claude") {
             url += "/v1/messages";
         }
 
@@ -150,13 +156,13 @@ public class OpenaiTranslate extends BaseCachedTranslate {
         String lvSourceLang = sLang.getLanguage();
         String lvTargetLang = tLang.getLanguage();
 
-        String defaultPrompt = String.format("Please translate the following text from %s to %s.", lvSourceLang, lvTargetLang);
+        String defaultPrompt =
+                String.format("Please translate the following text from %s to %s.", lvSourceLang, lvTargetLang);
         if (prompt.isEmpty()) {
             prompt = defaultPrompt;
         }
 
-
-        //判断翻译缓存里有没有
+        // 判断翻译缓存里有没有
         // U+2026 HORIZONTAL ELLIPSIS 水平省略号 …
         String lvShortText = text.length() > 5000 ? text.substring(0, 4997) + "\u2026" : text;
         String prev = getCachedTranslation(sLang, tLang, lvShortText);
@@ -169,16 +175,18 @@ public class OpenaiTranslate extends BaseCachedTranslate {
         if (provider == "OpenAI") {
             Map<String, Object> bodyMap = MapUtil.<String, Object>builder()
                     .put("model", model)
-                    .put("messages", Arrays.asList(
-                        MapUtil.<String, String>builder()
-                            .put("role", "system")
-                            .put("content", prompt)
-                            .build(), // system prompt
-                        MapUtil.<String, String>builder()
-                            .put("role", "user")
-                            .put("content", lvShortText)
-                            .build() // user input
-                    ))
+                    .put(
+                            "messages",
+                            Arrays.asList(
+                                    MapUtil.<String, String>builder()
+                                            .put("role", "system")
+                                            .put("content", prompt)
+                                            .build(), // system prompt
+                                    MapUtil.<String, String>builder()
+                                            .put("role", "user")
+                                            .put("content", lvShortText)
+                                            .build() // user input
+                                    ))
                     .put("temperature", temperature) // 可根据需要调整
                     .build();
             String bodyStr = JSONUtil.toJsonStr(bodyMap);
@@ -216,18 +224,19 @@ public class OpenaiTranslate extends BaseCachedTranslate {
                     result = "error: " + error;
                 }
             }
-        }
-        else if (provider == "Claude") {
+        } else if (provider == "Claude") {
             Map<String, Object> bodyMap = MapUtil.<String, Object>builder()
                     .put("model", model)
                     .put("max_tokens", 4096)
                     .put("system", prompt)
-                    .put("messages", Arrays.asList(
-                        MapUtil.<String, String>builder()
-                            .put("role", "user")
-                            .put("content", lvShortText)
-                            .build() // user input
-                    ))
+                    .put(
+                            "messages",
+                            Arrays.asList(
+                                    MapUtil.<String, String>builder()
+                                            .put("role", "user")
+                                            .put("content", lvShortText)
+                                            .build() // user input
+                                    ))
                     .put("temperature", temperature) // 可根据需要调整
                     .build();
             String bodyStr = JSONUtil.toJsonStr(bodyMap);
@@ -269,7 +278,6 @@ public class OpenaiTranslate extends BaseCachedTranslate {
         }
         return result;
     }
-
 
     /**
      * 是否在设置界面允许该插件的配置按钮可用，如果 false，配置按钮是灰色不可点的，也就没法配置 Token 了
@@ -319,7 +327,7 @@ public class OpenaiTranslate extends BaseCachedTranslate {
             gbc.gridy = 0;
             gbc.anchor = GridBagConstraints.EAST;
             panel.add(new JLabel("API key"), gbc);
-            
+
             gbc.gridx = 1;
             gbc.gridy = 0;
             gbc.fill = GridBagConstraints.HORIZONTAL;
@@ -329,7 +337,7 @@ public class OpenaiTranslate extends BaseCachedTranslate {
             gbc.gridy = 1;
             gbc.fill = GridBagConstraints.NONE;
             panel.add(new JLabel("URL(like https://api.openai.com)"), gbc);
-            
+
             gbc.gridx = 1;
             gbc.gridy = 1;
             gbc.fill = GridBagConstraints.HORIZONTAL;
@@ -339,7 +347,7 @@ public class OpenaiTranslate extends BaseCachedTranslate {
             gbc.gridy = 2;
             gbc.fill = GridBagConstraints.NONE;
             panel.add(new JLabel("Prompt"), gbc);
-            
+
             gbc.gridx = 1;
             gbc.gridy = 2;
             gbc.fill = GridBagConstraints.HORIZONTAL;
@@ -349,7 +357,7 @@ public class OpenaiTranslate extends BaseCachedTranslate {
             gbc.gridy = 3;
             gbc.fill = GridBagConstraints.NONE;
             panel.add(new JLabel("Temperature(default to 0)"), gbc);
-            
+
             gbc.gridx = 1;
             gbc.gridy = 3;
             gbc.fill = GridBagConstraints.HORIZONTAL;
@@ -359,7 +367,7 @@ public class OpenaiTranslate extends BaseCachedTranslate {
             gbc.gridy = 4;
             gbc.fill = GridBagConstraints.NONE;
             panel.add(new JLabel("Model Name"), gbc);
-            
+
             gbc.gridx = 1;
             gbc.gridy = 4;
             gbc.fill = GridBagConstraints.HORIZONTAL;
@@ -369,7 +377,7 @@ public class OpenaiTranslate extends BaseCachedTranslate {
             gbc.gridy = 5;
             gbc.fill = GridBagConstraints.NONE;
             panel.add(new JLabel("API format"), gbc);
-            
+
             gbc.gridx = 1;
             gbc.gridy = 5;
             gbc.fill = GridBagConstraints.HORIZONTAL;
@@ -379,7 +387,7 @@ public class OpenaiTranslate extends BaseCachedTranslate {
             gbc.gridy = 6;
             gbc.fill = GridBagConstraints.NONE;
             panel.add(new JLabel(""), gbc);
-            
+
             gbc.gridx = 1;
             gbc.gridy = 6;
             gbc.fill = GridBagConstraints.HORIZONTAL;
@@ -389,7 +397,7 @@ public class OpenaiTranslate extends BaseCachedTranslate {
             gbc.gridy = 7;
             gbc.fill = GridBagConstraints.NONE;
             panel.add(new JLabel(""), gbc);
-            
+
             gbc.gridx = 1;
             gbc.gridy = 7;
             gbc.fill = GridBagConstraints.HORIZONTAL;
@@ -408,7 +416,7 @@ public class OpenaiTranslate extends BaseCachedTranslate {
         }
 
         protected void onConfirm() {
-        // Placeholder for child class to implement
+            // Placeholder for child class to implement
         }
     }
 
