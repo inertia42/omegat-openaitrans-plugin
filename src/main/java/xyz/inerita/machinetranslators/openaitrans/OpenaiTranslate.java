@@ -84,7 +84,7 @@ public class OpenaiTranslate extends BaseCachedTranslate {
      */
     @Override
     public String getName() {
-        return "Openai Translate";
+        return "LLM Translate";
     }
 
     /**
