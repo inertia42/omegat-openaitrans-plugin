@@ -20,7 +20,7 @@ if (dotgit.exists()) {
     val baseVersion = details.lastTag.substring(1)
     version = when {
         details.isCleanTag -> baseVersion
-        else -> baseVersion + "-" + details.commitDistance + "-" + details.gitHash + "-SNAPSHOT"
+        else -> baseVersion
     }
 } else {
     val gitArchival = project.file(".git-archival.properties")
@@ -48,6 +48,7 @@ java {
 
 dependencies {
     packIntoJar("org.slf4j:slf4j-api:2.0.7")
+    implementation("org.netbeans.api:org-openide-awt:RELEASE130") 
     implementation("commons-io:commons-io:2.7")
     implementation("commons-lang:commons-lang:2.6")
     packIntoJar("cn.hutool:hutool-json:5.8.22")

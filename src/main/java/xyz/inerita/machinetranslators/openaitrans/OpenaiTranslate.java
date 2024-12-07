@@ -38,6 +38,7 @@ import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.openide.awt.Mnemonics;
 
 public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTranslation {
 
@@ -392,8 +393,8 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
             temperatureField = new JTextField();
             modelComboBox = new JComboBox<>();
             apiComboBox = new JComboBox<>();
-            temporaryCheckBox = new JCheckBox(OStrings.getString("PREFS_CREDENTIAL_TEMPORARY_LABEL"));
-            cacheCheckBox = new JCheckBox("Enable caching", true);
+            temporaryCheckBox = new JCheckBox();
+            cacheCheckBox = new JCheckBox(getString("MT_ENGINE_CACHE_BUTTON"), true);
 
             // 使用 GridBagLayout 添加组件
             GridBagConstraints gbc = new GridBagConstraints();
@@ -416,9 +417,12 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
 
             // 添加按钮面板
             JPanel buttonPanel = new JPanel();
+            Mnemonics.setLocalizedText(temporaryCheckBox, OStrings.getString("PREFS_CREDENTIAL_TEMPORARY_LABEL"));
             buttonPanel.setLayout(new BoxLayout(buttonPanel, BoxLayout.LINE_AXIS));
-            okButton = new JButton(OStrings.getString("BUTTON_OK"));
-            cancelButton = new JButton(OStrings.getString("BUTTON_CANCEL"));
+            okButton = new JButton();
+            Mnemonics.setLocalizedText(okButton, OStrings.getString("BUTTON_OK"));
+            cancelButton = new JButton();
+            Mnemonics.setLocalizedText(cancelButton, OStrings.getString("BUTTON_CANCEL"));
             buttonPanel.add(Box.createHorizontalGlue());
             buttonPanel.add(okButton);
             buttonPanel.add(Box.createRigidArea(new Dimension(5, 0)));
