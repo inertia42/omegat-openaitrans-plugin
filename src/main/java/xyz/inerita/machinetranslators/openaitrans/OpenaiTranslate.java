@@ -17,6 +17,7 @@ import org.omegat.util.Language;
 import org.omegat.util.OStrings;
 import org.omegat.util.Preferences;
 import org.omegat.util.StringUtil;
+import org.omegat.util.gui.StaticUIUtils;
 
 import java.awt.*;
 import java.math.BigDecimal;
@@ -43,19 +44,20 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
     /**
      * 设置存储 key 的名字，读取和设置值由 OmegaT 提供 API 来操作.
      */
-    private static final String PROPERTY_API_KEY = "openai.api.Key";
+    protected static final String PROPERTY_API_KEY = "openai.api.Key";
 
-    private static final String PROPERTY_API_URL = "openai.api.url";
-    private static final String PROPERTY_API_MODEL = "openai.api.model";
-    private static final String PROPERTY_API_PROVIDER = "openai.api.format";
-    private static final String PROPERTY_API_PROMPT = "openai.api.prompt";
-    private static final String PROPERTY_API_TEMPERATURE = "openai.api.temperature";
-    private static final String PROPERTY_API_CACHE = "openai.api.enable.cache";
+    protected static final String PROPERTY_API_URL = "openai.api.url";
+    protected static final String PROPERTY_API_MODEL = "openai.api.model";
+    protected static final String PROPERTY_API_PROVIDER = "openai.api.format";
+    protected static final String PROPERTY_API_PROMPT = "openai.api.prompt";
+    protected static final String PROPERTY_API_TEMPERATURE = "openai.api.temperature";
+    protected static final String PROPERTY_API_CACHE = "openai.api.enable.cache";
+    private static final ResourceBundle BUNDLE = ResourceBundle.getBundle("OpenaiTranslateBundle");
 
-    private static final String[] openaiModels = {
+    protected static final String[] openaiModels = {
         "gpt-4o", "gpt-4o-mini", "gpt-4", "gpt-4-turbo", "gpt-3.5-turbo", "gpt-3.5"
     };
-    private static final String[] claudeModels = {
+    protected static final String[] claudeModels = {
         "claude-3-opus-20240229",
         "claude-3-5-sonnet-20240620",
         "claude-3-5-sonnet-20241022",
@@ -63,9 +65,13 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
         "claude-3-5-haiku-20241022",
         "claude-3-haiku-20240307"
     };
-    private static final String[] Providers = {"default", "OpenAI", "Claude"};
+    protected static final String[] Providers = {"default", "OpenAI", "Claude"};
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(OpenaiTranslate.class);
+    protected static final Logger LOGGER = LoggerFactory.getLogger(OpenaiTranslate.class);
+
+    static String getString(String key) {
+        return BUNDLE.getString(key);
+    }
 
     /**
      * 在软件启动时会自动调用该函数来注册插件.
@@ -147,7 +153,7 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
     protected String getKey() throws Exception {
         String key = getCredential(PROPERTY_API_KEY);
         if (StringUtil.isEmpty(key)) {
-            // throw new Exception(getString("MT_ENGINE_MICROSOFT_SUBSCRIPTION_KEY_NOTFOUND"));
+            throw new Exception(getString("MT_ENGINE_OPENAI_API_KEY_NOTFOUND"));
         }
         return key;
     }
@@ -164,39 +170,36 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
     @Override
     protected String translate(Language sLang, Language tLang, String text) throws Exception {
         String apiKey = getCredential(PROPERTY_API_KEY);
-        String url = getCredential(PROPERTY_API_URL);
-        String model = getCredential(PROPERTY_API_MODEL);
-        String temperature_str = getCredential(PROPERTY_API_TEMPERATURE);
-        String provider = getCredential(PROPERTY_API_PROVIDER);
-        String prompt = getCredential(PROPERTY_API_PROMPT);
-        String enableCache = getCredential(PROPERTY_API_CACHE);
+        String url = Preferences.getPreference(PROPERTY_API_URL);
+        String model = Preferences.getPreference(PROPERTY_API_MODEL);
+        String temperature_str = Preferences.getPreference(PROPERTY_API_TEMPERATURE);
+        String provider = Preferences.getPreference(PROPERTY_API_PROVIDER);
+        String prompt = Preferences.getPreference(PROPERTY_API_PROMPT);
+        String enableCache = Preferences.getPreference(PROPERTY_API_CACHE);
 
         BigDecimal fullAccuracy = new BigDecimal(Double.parseDouble(temperature_str));
         fullAccuracy = fullAccuracy.setScale(3, RoundingMode.DOWN); // 截断到三位小数
         double temperature = fullAccuracy.doubleValue();
 
         if (apiKey.isEmpty()) {
-            // return url + " " + model + " " + temperature_str;
-            return "Please set API KEY!";
+            return getString("MT_ENGINE_OPENAI_API_KEY_NOTFOUND");
         }
 
         if (url.isEmpty()) {
-            // return url + " " + model + " " + temperature_str;
-            return "Please set API URL!";
+            return getString("MT_ENGINE_OPENAI_API_URL_NOTFOUND");
         }
 
-        // LOGGER.debug("apiKey = {}", apiKey);
 
         List<String> openaiModelsList = Arrays.asList(openaiModels);
         List<String> claudeModelsList = Arrays.asList(claudeModels);
 
         if (openaiModelsList.contains(model)) {
-            provider = (provider == "default") ? "OpenAI" : provider;
+            provider = ("default".equals(provider)) ? "OpenAI" : provider;
             // url += "/v1/chat/completions";
         }
         // 检查 model 是否在 claudeModels 中
         else if (claudeModelsList.contains(model)) {
-            provider = (provider == "default") ? "Claude" : provider;
+            provider = ("default".equals(provider)) ? "Claude" : provider;
             // url += "/v1/messages";
         }
         // 如果 model 不在任何一个列表中
@@ -204,9 +207,9 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
             return "An unsupported model was used!";
         }
 
-        if (provider == "OpenAI") {
+        if ("OpenAI".equals(provider)) {
             url += "/v1/chat/completions";
-        } else if (provider == "Claude") {
+        } else if ("Claude".equals(provider)) {
             url += "/v1/messages";
         }
 
@@ -224,13 +227,13 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
         // U+2026 HORIZONTAL ELLIPSIS 水平省略号 …
         String lvShortText = text.length() > 5000 ? text.substring(0, 4997) + "\u2026" : text;
         String prev = getCachedTranslation(sLang, tLang, lvShortText);
-        if (prev != null && enableCache == "true") {
+        if (prev != null && "true".equals(enableCache)) {
             return prev;
         }
 
         String result = "";
 
-        if (provider == "OpenAI") {
+        if ("OpenAI".equals(provider)) {
             Map<String, Object> bodyMap = MapUtil.<String, Object>builder()
                     .put("model", model)
                     .put(
@@ -282,7 +285,7 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
                     result = "error: " + error;
                 }
             }
-        } else if (provider == "Claude") {
+        } else if ("Claude".equals(provider)) {
             Map<String, Object> bodyMap = MapUtil.<String, Object>builder()
                     .put("model", model)
                     .put("max_tokens", 4096)
@@ -345,136 +348,132 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
         return true;
     }
 
-    public class MTConfigDialog extends JDialog {
-        public JPanel panel;
-        public JTextField valueField1; // For apikey
-        public JTextField valueField2; // For url
-        public JTextField valueField3; // For prompt
-        public JTextField valueField4; // For temperature
-        public JComboBox<String> providerComboBox; // For service provider
-        public JComboBox<String> modelComboBox; // For model name
-        public JComboBox<String> apiComboBox; // For Api format
-        public JCheckBox temporaryCheckBox;
-        public JCheckBox cacheCheckBox;
+    @SuppressWarnings("serial")
+    public class OpenAIConfigPanel extends JPanel {
+        private javax.swing.JPanel descriptionPanel;
+        private javax.swing.JTextArea descriptionTextArea;
+        private javax.swing.JPanel itemsPanel;
+        private javax.swing.JPanel credentialsPanel;
+        public javax.swing.JTextField apiKeyField;
+        public javax.swing.JTextField urlField;
+        public javax.swing.JTextField promptField;
+        public javax.swing.JTextField temperatureField;
+        public javax.swing.JComboBox<String> modelComboBox;
+        public javax.swing.JComboBox<String> apiComboBox;
+        public javax.swing.JCheckBox temporaryCheckBox;
+        public javax.swing.JCheckBox cacheCheckBox;
+        public javax.swing.JButton okButton;
+        public javax.swing.JButton cancelButton;
 
-        public MTConfigDialog(Window parent, String title) {
-            super(parent, title, ModalityType.APPLICATION_MODAL);
-            panel = new JPanel(new GridBagLayout());
-            valueField1 = new JTextField();
-            valueField2 = new JTextField();
-            valueField3 = new JTextField();
-            valueField4 = new JTextField();
+        public OpenAIConfigPanel() {
+            initComponents();
+        }
 
-            int totalLength = openaiModels.length + claudeModels.length;
-            // 创建新数组
-            String[] combinedModels = new String[totalLength];
-            // 复制 openaiModels 到新数组
-            System.arraycopy(openaiModels, 0, combinedModels, 0, openaiModels.length);
-            // 复制 claudeModels 到新数组
-            System.arraycopy(claudeModels, 0, combinedModels, openaiModels.length, claudeModels.length);
-            // providerComboBox = new JComboBox<>(new String[]{"OpenAI", "Claude"});
-            modelComboBox = new JComboBox<>(combinedModels);
-            apiComboBox = new JComboBox<>(Providers);
-            temporaryCheckBox = new JCheckBox("Only for this session");
+        private void initComponents() {
+            setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+            setLayout(new BorderLayout());
+
+            // 初始化组件
+            descriptionPanel = new JPanel(new BorderLayout());
+            descriptionTextArea = new JTextArea();
+            itemsPanel = new JPanel();
+            credentialsPanel = new JPanel(new GridBagLayout());
+            
+            // 设置文本区域属性
+            descriptionTextArea.setEditable(false);
+            descriptionTextArea.setLineWrap(true);
+            descriptionTextArea.setWrapStyleWord(true);
+            descriptionTextArea.setOpaque(false);
+            
+            // 创建输入组件
+            apiKeyField = new JTextField();
+            urlField = new JTextField();
+            promptField = new JTextField();
+            temperatureField = new JTextField();
+            modelComboBox = new JComboBox<>();
+            apiComboBox = new JComboBox<>();
+            temporaryCheckBox = new JCheckBox(OStrings.getString("PREFS_CREDENTIAL_TEMPORARY_LABEL"));
             cacheCheckBox = new JCheckBox("Enable caching", true);
 
+            // 使用 GridBagLayout 添加组件
             GridBagConstraints gbc = new GridBagConstraints();
-            gbc.insets = new Insets(5, 5, 5, 5); // Adding some padding
-
-            gbc.gridx = 0;
-            gbc.gridy = 0;
-            gbc.anchor = GridBagConstraints.EAST;
-            panel.add(new JLabel(getString("MT_ENGINE_OPENAI_KEY_LABEL")), gbc);
-
-            gbc.gridx = 1;
-            gbc.gridy = 0;
+            gbc.insets = new Insets(5, 5, 5, 5);
             gbc.fill = GridBagConstraints.HORIZONTAL;
-            panel.add(valueField1, gbc);
+            
+            addLabelAndField(credentialsPanel, "MT_ENGINE_OPENAI_KEY_LABEL", apiKeyField, gbc, 0);
+            addLabelAndField(credentialsPanel, "MT_ENGINE_OPENAI_URL_LABEL", urlField, gbc, 1);
+            addLabelAndField(credentialsPanel, "MT_ENGINE_OPENAI_PROMPT_LABEL", promptField, gbc, 2);
+            addLabelAndField(credentialsPanel, "MT_ENGINE_OPENAI_TEMPERATURE_LABEL", temperatureField, gbc, 3);
+            addLabelAndField(credentialsPanel, "MT_ENGINE_OPENAI_MODEL_NAME_LABEL", modelComboBox, gbc, 4);
+            addLabelAndField(credentialsPanel, "MT_ENGINE_OPENAI_API_FORMAT_LABEL", apiComboBox, gbc, 5);
 
-            gbc.gridx = 0;
-            gbc.gridy = 1;
-            gbc.fill = GridBagConstraints.NONE;
-            panel.add(new JLabel(getString("MT_ENGINE_OPENAI_URL_LABEL")), gbc);
-
-            gbc.gridx = 1;
-            gbc.gridy = 1;
-            gbc.fill = GridBagConstraints.HORIZONTAL;
-            panel.add(valueField2, gbc);
-
-            gbc.gridx = 0;
-            gbc.gridy = 2;
-            gbc.fill = GridBagConstraints.NONE;
-            panel.add(new JLabel(getString("MT_ENGINE_OPENAI_PROMPT_LABEL")), gbc);
-
-            gbc.gridx = 1;
-            gbc.gridy = 2;
-            gbc.fill = GridBagConstraints.HORIZONTAL;
-            panel.add(valueField3, gbc);
-
-            gbc.gridx = 0;
-            gbc.gridy = 3;
-            gbc.fill = GridBagConstraints.NONE;
-            panel.add(new JLabel(getString("MT_ENGINE_OPENAI_TEMPERATURE_LABEL")), gbc);
-
-            gbc.gridx = 1;
-            gbc.gridy = 3;
-            gbc.fill = GridBagConstraints.HORIZONTAL;
-            panel.add(valueField4, gbc);
-
-            gbc.gridx = 0;
-            gbc.gridy = 4;
-            gbc.fill = GridBagConstraints.NONE;
-            panel.add(new JLabel(getString("MT_ENGINE_OPENAI_MODEL_NAME_LABEL")), gbc);
-
-            gbc.gridx = 1;
-            gbc.gridy = 4;
-            gbc.fill = GridBagConstraints.HORIZONTAL;
-            panel.add(modelComboBox, gbc);
-
-            gbc.gridx = 0;
-            gbc.gridy = 5;
-            gbc.fill = GridBagConstraints.NONE;
-            panel.add(new JLabel(getString("MT_ENGINE_OPENAI_API_FORMAT_LABEL")), gbc);
-
-            gbc.gridx = 1;
-            gbc.gridy = 5;
-            gbc.fill = GridBagConstraints.HORIZONTAL;
-            panel.add(apiComboBox, gbc);
-
-            gbc.gridx = 0;
-            gbc.gridy = 6;
-            gbc.fill = GridBagConstraints.NONE;
-            panel.add(new JLabel(""), gbc);
-
+            // 添加复选框
             gbc.gridx = 1;
             gbc.gridy = 6;
-            gbc.fill = GridBagConstraints.HORIZONTAL;
-            panel.add(temporaryCheckBox, gbc);
+            credentialsPanel.add(temporaryCheckBox, gbc);
+            gbc.gridy = 7;
+            credentialsPanel.add(cacheCheckBox, gbc);
 
+            // 添加按钮面板
+            JPanel buttonPanel = new JPanel();
+            buttonPanel.setLayout(new BoxLayout(buttonPanel, BoxLayout.LINE_AXIS));
+            okButton = new JButton(OStrings.getString("BUTTON_OK"));
+            cancelButton = new JButton(OStrings.getString("BUTTON_CANCEL"));
+            buttonPanel.add(Box.createHorizontalGlue());
+            buttonPanel.add(okButton);
+            buttonPanel.add(Box.createRigidArea(new Dimension(5, 0)));
+            buttonPanel.add(cancelButton);
+
+            // 组装面板
+            add(descriptionPanel, BorderLayout.NORTH);
+            add(credentialsPanel, BorderLayout.CENTER);
+            add(buttonPanel, BorderLayout.SOUTH);
+        }
+
+        private void addLabelAndField(JPanel panel, String labelKey, JComponent field, GridBagConstraints gbc, int row) {
             gbc.gridx = 0;
-            gbc.gridy = 7;
-            gbc.fill = GridBagConstraints.NONE;
-            panel.add(new JLabel(""), gbc);
-
+            gbc.gridy = row;
+            panel.add(new JLabel(getString(labelKey)), gbc);
+            
             gbc.gridx = 1;
-            gbc.gridy = 7;
-            gbc.fill = GridBagConstraints.HORIZONTAL;
-            panel.add(cacheCheckBox, gbc);
+            gbc.weightx = 1.0;
+            panel.add(field, gbc);
+            gbc.weightx = 0.0;
+        }
+    }
 
-            gbc.gridx = 1;
-            gbc.gridy = 8;
-            gbc.fill = GridBagConstraints.NONE;
-            JButton confirmButton = new JButton(getString("MT_ENGINE_CONFIRM_BUTTON"));
-            confirmButton.addActionListener(e -> onConfirm());
-            panel.add(confirmButton, gbc);
+    public class OpenAIConfigDialog {
+        private final JDialog dialog;
+        private final OpenAIConfigPanel panel;
 
-            add(panel);
-            pack();
-            setLocationRelativeTo(parent);
+        public OpenAIConfigDialog(Window parent, String title) {
+            dialog = new JDialog(parent, title, Dialog.ModalityType.APPLICATION_MODAL);
+            panel = new OpenAIConfigPanel();
+            
+            dialog.getContentPane().add(panel);
+            
+            panel.cancelButton.addActionListener(e -> dialog.dispose());
+            panel.okButton.addActionListener(e -> {
+                onConfirm();
+                dialog.dispose();
+            });
+            
+            StaticUIUtils.setEscapeClosable(dialog);
+            dialog.getRootPane().setDefaultButton(panel.okButton);
         }
 
         protected void onConfirm() {
-            // Placeholder for child class to implement
+            // 将在 OpenaiTranslate 类中实现
+        }
+
+        public void show() {
+            dialog.pack();
+            dialog.setLocationRelativeTo(dialog.getOwner());
+            dialog.setVisible(true);
+        }
+
+        public OpenAIConfigPanel getPanel() {
+            return panel;
         }
     }
 
@@ -483,48 +482,44 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
      */
     @Override
     public void showConfigurationUI(Window parent) {
-        MTConfigDialog dialog = new MTConfigDialog(parent, getName()) {
+        OpenAIConfigDialog dialog = new OpenAIConfigDialog(parent, getName()) {
             @Override
             protected void onConfirm() {
-                String key = valueField1.getText().trim();
-                String url = valueField2.getText().trim();
-                String prompt = valueField3.getText().trim();
-                String temperature = valueField4.getText().trim();
-                String model = (String) modelComboBox.getSelectedItem();
-                String provider = (String) apiComboBox.getSelectedItem();
-                boolean temporary = temporaryCheckBox.isSelected();
-                String cache = Boolean.toString(cacheCheckBox.isSelected());
-
-                setCredential(PROPERTY_API_KEY, key, temporary);
-                setCredential(PROPERTY_API_URL, url, temporary);
-                setCredential(PROPERTY_API_PROMPT, prompt, temporary);
-                setCredential(PROPERTY_API_TEMPERATURE, temperature, temporary);
-                setCredential(PROPERTY_API_MODEL, model, temporary);
-                setCredential(PROPERTY_API_PROVIDER, provider, temporary);
-                setCredential(PROPERTY_API_CACHE, cache, temporary);
+                OpenAIConfigPanel panel = getPanel();
+                boolean temporary = panel.temporaryCheckBox.isSelected();
+                
+                // 保存凭证信息
+                setCredential(PROPERTY_API_KEY, panel.apiKeyField.getText().trim(), temporary);
+                Preferences.setPreference(PROPERTY_API_URL, panel.urlField.getText().trim());
+                
+                // 保存其他设置到 Preferences
+                Preferences.setPreference(PROPERTY_API_PROMPT, panel.promptField.getText().trim());
+                Preferences.setPreference(PROPERTY_API_TEMPERATURE, panel.temperatureField.getText().trim());
+                Preferences.setPreference(PROPERTY_API_MODEL, (String) panel.modelComboBox.getSelectedItem());
+                Preferences.setPreference(PROPERTY_API_PROVIDER, (String) panel.apiComboBox.getSelectedItem());
+                Preferences.setPreference(PROPERTY_API_CACHE, panel.cacheCheckBox.isSelected());
             }
         };
 
-        // Set initial values for the fields
-        dialog.valueField1.setText(getCredential(PROPERTY_API_KEY));
-        // String provider = getCredential(PROPERTY_API_PROVIDER);
-        // String defaultUrl = getDefaultUrlForProvider(provider);
-        String url = getCredential(PROPERTY_API_URL);
-        // if (url == null || url.isEmpty()) {
-        //     url = defaultUrl;
-        // }
-        dialog.valueField2.setText(url);
-        dialog.valueField3.setText(getCredential(PROPERTY_API_PROMPT));
-        String temperature = getCredential(PROPERTY_API_TEMPERATURE);
-        if (temperature == null || temperature.isEmpty()) {
-            temperature = "0";
-        }
-        dialog.valueField4.setText(temperature);
-        // dialog.providerComboBox.setSelectedItem(provider);
-        dialog.modelComboBox.setSelectedItem(getCredential(PROPERTY_API_MODEL));
-        dialog.apiComboBox.setSelectedItem(getCredential(PROPERTY_API_PROVIDER));
-        dialog.temporaryCheckBox.setSelected(isCredentialStoredTemporarily(PROPERTY_API_KEY));
+        // 设置初始值
+        OpenAIConfigPanel panel = dialog.getPanel();
+        panel.apiKeyField.setText(getCredential(PROPERTY_API_KEY));
+        panel.urlField.setText(Preferences.getPreference(PROPERTY_API_URL));
+        panel.promptField.setText(Preferences.getPreference(PROPERTY_API_PROMPT));
+        panel.temperatureField.setText(Preferences.getPreference(PROPERTY_API_TEMPERATURE));
+        panel.modelComboBox.setModel(new DefaultComboBoxModel<>(getAllModels()));
+        panel.modelComboBox.setSelectedItem(Preferences.getPreference(PROPERTY_API_MODEL));
+        panel.apiComboBox.setModel(new DefaultComboBoxModel<>(Providers));
+        panel.apiComboBox.setSelectedItem(Preferences.getPreference(PROPERTY_API_PROVIDER));
+        panel.temporaryCheckBox.setSelected(isCredentialStoredTemporarily(PROPERTY_API_KEY));
 
-        dialog.setVisible(true);
+        dialog.show();
+    }
+
+    private String[] getAllModels() {
+        String[] combinedModels = new String[openaiModels.length + claudeModels.length];
+        System.arraycopy(openaiModels, 0, combinedModels, 0, openaiModels.length);
+        System.arraycopy(claudeModels, 0, combinedModels, openaiModels.length, claudeModels.length);
+        return combinedModels;
     }
 }
