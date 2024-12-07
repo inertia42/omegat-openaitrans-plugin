@@ -10,8 +10,13 @@ package xyz.inertia.machinetranslators.openaitrans;
 
 import org.omegat.core.Core;
 import org.omegat.core.machinetranslators.BaseCachedTranslate;
+import org.omegat.gui.exttrans.IMachineTranslation;
 import org.omegat.gui.exttrans.MTConfigDialog;
+import org.omegat.util.CredentialsManager;
 import org.omegat.util.Language;
+import org.omegat.util.OStrings;
+import org.omegat.util.Preferences;
+import org.omegat.util.StringUtil;
 
 import java.awt.*;
 import java.math.BigDecimal;
@@ -32,7 +37,7 @@ import cn.hutool.json.JSONUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class OpenaiTranslate extends BaseCachedTranslate {
+public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTranslation {
 
     /**
      * 设置存储 key 的名字，读取和设置值由 OmegaT 提供 API 来操作.
@@ -64,6 +69,7 @@ public class OpenaiTranslate extends BaseCachedTranslate {
     /**
      * 在软件启动时会自动调用该函数来注册插件.
      */
+    @SuppressWarnings("unused")
     public static void loadPlugins() {
         LOGGER.debug("加载 OpenaiTranslate Plugin");
         Core.registerMachineTranslationClass(OpenaiTranslate.class);
@@ -72,6 +78,7 @@ public class OpenaiTranslate extends BaseCachedTranslate {
     /**
      * 卸载插件，可以留空，示例代码就留空.
      */
+    @SuppressWarnings("unused")
     public static void unloadPlugins() {}
 
     /**
@@ -92,6 +99,56 @@ public class OpenaiTranslate extends BaseCachedTranslate {
     @Override
     public String getName() {
         return "Openai Translate";
+    }
+
+    /**
+     * Store a credential. Credentials are stored in temporary system properties and, if
+     * <code>temporary</code> is <code>false</code>, in the program's persistent preferences encoded in
+     * Base64. Retrieve a credential with {@link #getCredential(String)}.
+     *
+     * @param id
+     *            ID or key of the credential to store
+     * @param value
+     *            value of the credential to store
+     * @param temporary
+     *            if <code>false</code>, encode with Base64 and store in persistent preferences as well
+     */
+    protected void setCredential(String id, String value, boolean temporary) {
+        System.setProperty(id, value);
+        if (temporary) {
+            CredentialsManager.getInstance().store(id, "");
+        } else {
+            CredentialsManager.getInstance().store(id, value);
+        }
+    }
+
+    /**
+     * Retrieve a credential with the given ID. First checks temporary system properties, then falls back to
+     * the program's persistent preferences. Store a credential with
+     * {@link #setCredential(String, String, boolean)}.
+     *
+     * @param id
+     *            ID or key of the credential to retrieve
+     * @return the credential value in plain text
+     */
+    protected String getCredential(String id) {
+        String property = System.getProperty(id);
+        if (property != null) {
+            return property;
+        }
+        return CredentialsManager.getInstance().retrieve(id).orElse("");
+    }
+
+    protected void setKey(String key, boolean temporary) {
+        setCredential(PROPERTY_API_KEY, key, temporary);
+    }
+
+    protected String getKey() throws Exception {
+        String key = getCredential(PROPERTY_API_KEY);
+        if (StringUtil.isEmpty(key)) {
+            // throw new Exception(getString("MT_ENGINE_MICROSOFT_SUBSCRIPTION_KEY_NOTFOUND"));
+        }
+        return key;
     }
 
     /**
