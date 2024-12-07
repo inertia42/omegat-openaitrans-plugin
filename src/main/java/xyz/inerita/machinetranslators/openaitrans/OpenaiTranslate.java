@@ -24,6 +24,7 @@ import java.math.RoundingMode;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.ResourceBundle;
 
 import javax.swing.*;
 
@@ -383,7 +384,7 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
             gbc.gridx = 0;
             gbc.gridy = 0;
             gbc.anchor = GridBagConstraints.EAST;
-            panel.add(new JLabel("API key"), gbc);
+            panel.add(new JLabel(getString("MT_ENGINE_OPENAI_KEY_LABEL")), gbc);
 
             gbc.gridx = 1;
             gbc.gridy = 0;
@@ -393,7 +394,7 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
             gbc.gridx = 0;
             gbc.gridy = 1;
             gbc.fill = GridBagConstraints.NONE;
-            panel.add(new JLabel("URL(like https://api.openai.com)"), gbc);
+            panel.add(new JLabel(getString("MT_ENGINE_OPENAI_URL_LABEL")), gbc);
 
             gbc.gridx = 1;
             gbc.gridy = 1;
@@ -403,7 +404,7 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
             gbc.gridx = 0;
             gbc.gridy = 2;
             gbc.fill = GridBagConstraints.NONE;
-            panel.add(new JLabel("Prompt"), gbc);
+            panel.add(new JLabel(getString("MT_ENGINE_OPENAI_PROMPT_LABEL")), gbc);
 
             gbc.gridx = 1;
             gbc.gridy = 2;
@@ -413,7 +414,7 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
             gbc.gridx = 0;
             gbc.gridy = 3;
             gbc.fill = GridBagConstraints.NONE;
-            panel.add(new JLabel("Temperature(default to 0)"), gbc);
+            panel.add(new JLabel(getString("MT_ENGINE_OPENAI_TEMPERATURE_LABEL")), gbc);
 
             gbc.gridx = 1;
             gbc.gridy = 3;
@@ -423,7 +424,7 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
             gbc.gridx = 0;
             gbc.gridy = 4;
             gbc.fill = GridBagConstraints.NONE;
-            panel.add(new JLabel("Model Name"), gbc);
+            panel.add(new JLabel(getString("MT_ENGINE_OPENAI_MODEL_NAME_LABEL")), gbc);
 
             gbc.gridx = 1;
             gbc.gridy = 4;
@@ -433,7 +434,7 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
             gbc.gridx = 0;
             gbc.gridy = 5;
             gbc.fill = GridBagConstraints.NONE;
-            panel.add(new JLabel("API format"), gbc);
+            panel.add(new JLabel(getString("MT_ENGINE_OPENAI_API_FORMAT_LABEL")), gbc);
 
             gbc.gridx = 1;
             gbc.gridy = 5;
@@ -463,7 +464,7 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
             gbc.gridx = 1;
             gbc.gridy = 8;
             gbc.fill = GridBagConstraints.NONE;
-            JButton confirmButton = new JButton("Confirm");
+            JButton confirmButton = new JButton(getString("MT_ENGINE_CONFIRM_BUTTON"));
             confirmButton.addActionListener(e -> onConfirm());
             panel.add(confirmButton, gbc);
 
