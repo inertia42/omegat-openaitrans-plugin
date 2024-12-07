@@ -28,6 +28,11 @@ import java.util.Map;
 import java.util.ResourceBundle;
 
 import javax.swing.*;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
+import javax.swing.JTextArea;
+import javax.swing.JScrollPane;
+import java.awt.Color;
 
 import cn.hutool.core.map.MapUtil;
 import cn.hutool.http.HttpRequest;
@@ -355,9 +360,9 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
         private javax.swing.JTextArea descriptionTextArea;
         private javax.swing.JPanel itemsPanel;
         private javax.swing.JPanel credentialsPanel;
-        public javax.swing.JTextField apiKeyField;
+        public javax.swing.JTextArea apiKeyField;
+        public javax.swing.JTextArea promptField;
         public javax.swing.JTextField urlField;
-        public javax.swing.JTextField promptField;
         public javax.swing.JTextField temperatureField;
         public javax.swing.JComboBox<String> modelComboBox;
         public javax.swing.JComboBox<String> apiComboBox;
@@ -387,9 +392,9 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
             descriptionTextArea.setOpaque(false);
             
             // 创建输入组件
-            apiKeyField = new JTextField();
+            apiKeyField = createMultiLineTextArea();
             urlField = new JTextField();
-            promptField = new JTextField();
+            promptField = createMultiLineTextArea();
             temperatureField = new JTextField();
             modelComboBox = new JComboBox<>();
             apiComboBox = new JComboBox<>();
@@ -434,14 +439,69 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
             add(buttonPanel, BorderLayout.SOUTH);
         }
 
+        private JTextArea createMultiLineTextArea() {
+            JTextArea textArea = new JTextArea();
+            textArea.setLineWrap(true);  // 启用自动换行
+            textArea.setWrapStyleWord(true);  // 按单词换行
+            textArea.setRows(1);  // 初始行数
+            
+            // 设置首选大小
+            textArea.setPreferredSize(new Dimension(300, textArea.getFont().getSize() + 4));
+            
+            // 添加文档监听器来处理自动调整大小
+            textArea.getDocument().addDocumentListener(new DocumentListener() {
+                private void updateSize() {
+                    String text = textArea.getText();
+                    // 计算需要的行数
+                    int rows = Math.max(1, (text.length() * textArea.getFont().getSize()) / 300 + 1);
+                    textArea.setRows(rows);
+                    // 更新大小
+                    textArea.setPreferredSize(new Dimension(300, textArea.getFont().getSize() * rows + 4));
+                    textArea.revalidate();
+                }
+
+                @Override
+                public void insertUpdate(DocumentEvent e) {
+                    updateSize();
+                }
+
+                @Override
+                public void removeUpdate(DocumentEvent e) {
+                    updateSize();
+                }
+
+                @Override
+                public void changedUpdate(DocumentEvent e) {
+                    updateSize();
+                }
+            });
+
+            // 设置边框，让它看起来像 TextField
+            textArea.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(Color.GRAY),
+                BorderFactory.createEmptyBorder(2, 2, 2, 2)
+            ));
+
+            return textArea;
+        }
+
         private void addLabelAndField(JPanel panel, String labelKey, JComponent field, GridBagConstraints gbc, int row) {
             gbc.gridx = 0;
             gbc.gridy = row;
+            gbc.weightx = 0.0;
             panel.add(new JLabel(getString(labelKey)), gbc);
             
             gbc.gridx = 1;
             gbc.weightx = 1.0;
-            panel.add(field, gbc);
+            // 如果是 JTextArea，用 JScrollPane 包装
+            if (field instanceof JTextArea) {
+                JScrollPane scrollPane = new JScrollPane(field);
+                scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+                scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+                panel.add(scrollPane, gbc);
+            } else {
+                panel.add(field, gbc);
+            }
             gbc.weightx = 0.0;
         }
     }
