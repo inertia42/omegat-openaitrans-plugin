@@ -61,7 +61,16 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
     private static final ResourceBundle BUNDLE = ResourceBundle.getBundle("OpenaiTranslateBundle");
 
     protected static final String[] openaiModels = {
-        "gpt-4o", "gpt-4o-mini", "gpt-4", "gpt-4-turbo", "gpt-3.5-turbo", "gpt-3.5"
+        "gpt-4o",
+        "gpt-4o-2024-11-20",
+        "gpt-4o-2024-08-06",
+        "gpt-4o-2024-05-13",
+        "gpt-4o-mini",
+        "gpt-4",
+        "gpt-4-turbo",
+        "gpt-3.5-turbo",
+        "gpt-3.5",
+        "deepseek-chat"
     };
     protected static final String[] claudeModels = {
         "claude-3-opus-20240229",
@@ -71,7 +80,7 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
         "claude-3-5-haiku-20241022",
         "claude-3-haiku-20240307"
     };
-    protected static final String[] Providers = {"default", "OpenAI", "Claude"};
+    protected static final String[] Providers = {"default", "OpenAI", "Claude", "DeepSeek"};
 
     protected static final Logger LOGGER = LoggerFactory.getLogger(OpenaiTranslate.class);
 
@@ -200,7 +209,7 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
         List<String> claudeModelsList = Arrays.asList(claudeModels);
 
         if (openaiModelsList.contains(model)) {
-            provider = ("default".equals(provider)) ? "OpenAI" : provider;
+            provider = ("default".equals(provider) || "DeepSeek".equals(provider)) ? "OpenAI" : provider;
             // url += "/v1/chat/completions";
         }
         // 检查 model 是否在 claudeModels 中
@@ -238,6 +247,9 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
         }
 
         String result = "";
+
+        // LOGGER.info("翻译选项: provider={}, model={}, prompt={}, temperature={}, enableCache={}", 
+        //         provider, model, prompt, temperature, enableCache);
 
         if ("OpenAI".equals(provider)) {
             Map<String, Object> bodyMap = MapUtil.<String, Object>builder()
