@@ -269,17 +269,7 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
             }
         }
         String result = "";
-        // List<org.omegat.gui.glossary.GlossaryEntry> entries = Core.getGlossary().getDisplayedEntries();
-        // for (org.omegat.gui.glossary.GlossaryEntry entry : entries) {
-        //     LOGGER.info("词汇表条目 - 源词: {}, 目标词: {}, 注释: {}", 
-        //         entry.getSrcText(), 
-        //         entry.getLocText(), 
-        //         entry.getCommentText());
-        // }
-
-        // LOGGER.info("翻译选项: provider={}, model={}, prompt={}, temperature={}, enableCache={}", 
-        //         provider, model, prompt, temperature, enableCache);
-
+        
         if ("OpenAI".equals(provider)) {
             Map<String, Object> bodyMap = MapUtil.<String, Object>builder()
                     .put("model", model)
@@ -623,7 +613,8 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
         panel.modelComboBox.setSelectedItem(Preferences.getPreference(PROPERTY_API_MODEL));
         panel.apiComboBox.setModel(new DefaultComboBoxModel<>(Providers));
         panel.apiComboBox.setSelectedItem(Preferences.getPreference(PROPERTY_API_PROVIDER));
-        panel.temporaryCheckBox.setSelected(isCredentialStoredTemporarily(PROPERTY_API_KEY));
+        panel.cacheCheckBox.setSelected(Boolean.parseBoolean(Preferences.getPreference(PROPERTY_API_CACHE)));
+        panel.temporaryCheckBox.setSelected(false);
         panel.glossaryCheckBox.setSelected(Boolean.parseBoolean(Preferences.getPreference(PROPERTY_API_GLOSSARY)));
 
         dialog.show();
