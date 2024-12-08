@@ -58,6 +58,7 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
     protected static final String PROPERTY_API_PROMPT = "openai.api.prompt";
     protected static final String PROPERTY_API_TEMPERATURE = "openai.api.temperature";
     protected static final String PROPERTY_API_CACHE = "openai.api.enable.cache";
+    protected static final String PROPERTY_API_GLOSSARY = "openai.api.enable.glossary";
     private static final ResourceBundle BUNDLE = ResourceBundle.getBundle("OpenaiTranslateBundle");
 
     protected static final String[] openaiModels = {
@@ -191,6 +192,7 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
         String provider = Preferences.getPreference(PROPERTY_API_PROVIDER);
         String prompt = Preferences.getPreference(PROPERTY_API_PROMPT);
         String enableCache = Preferences.getPreference(PROPERTY_API_CACHE);
+        String enableGlossary = Preferences.getPreference(PROPERTY_API_GLOSSARY);
 
         BigDecimal fullAccuracy = new BigDecimal(Double.parseDouble(temperature_str));
         fullAccuracy = fullAccuracy.setScale(3, RoundingMode.DOWN); // 截断到三位小数
@@ -238,6 +240,9 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
             prompt = defaultPrompt;
         }
 
+        
+        // LOGGER.info("prompt = {}", prompt);
+
         // 判断翻译缓存里有没有
         // U+2026 HORIZONTAL ELLIPSIS 水平省略号 …
         String lvShortText = text.length() > 5000 ? text.substring(0, 4997) + "\u2026" : text;
@@ -246,7 +251,31 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
             return prev;
         }
 
+        // 添加 glossary 信息
+        StringBuilder glossaryTable = new StringBuilder();
+        if ("true".equals(enableGlossary)) {
+            List<org.omegat.gui.glossary.GlossaryEntry> entries = Core.getGlossaryManager().searchSourceMatches(Core.getEditor().getCurrentEntry());
+            if (!entries.isEmpty()) {
+                glossaryTable.append("\nYou can refer to the following glossary when translating:\n");
+                
+                for (org.omegat.gui.glossary.GlossaryEntry entry : entries) {
+                    glossaryTable.append(String.format("src: %s, loc: %s, comment: %s\n",
+                        entry.getSrcText(),
+                        entry.getLocText(),
+                        entry.getCommentText()
+                    ));
+                }
+                prompt = prompt + glossaryTable.toString();
+            }
+        }
         String result = "";
+        // List<org.omegat.gui.glossary.GlossaryEntry> entries = Core.getGlossary().getDisplayedEntries();
+        // for (org.omegat.gui.glossary.GlossaryEntry entry : entries) {
+        //     LOGGER.info("词汇表条目 - 源词: {}, 目标词: {}, 注释: {}", 
+        //         entry.getSrcText(), 
+        //         entry.getLocText(), 
+        //         entry.getCommentText());
+        // }
 
         // LOGGER.info("翻译选项: provider={}, model={}, prompt={}, temperature={}, enableCache={}", 
         //         provider, model, prompt, temperature, enableCache);
@@ -268,6 +297,7 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
                                     ))
                     .put("temperature", temperature) // 可根据需要调整
                     .build();
+            LOGGER.info("bodyMap = {}", bodyMap);
             String bodyStr = JSONUtil.toJsonStr(bodyMap);
 
             LOGGER.debug("bodyStr = {}", bodyStr);
@@ -318,6 +348,7 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
                                     ))
                     .put("temperature", temperature) // 可根据需要调整
                     .build();
+            LOGGER.info("bodyMap = {}", bodyMap);
             String bodyStr = JSONUtil.toJsonStr(bodyMap);
 
             LOGGER.debug("bodyStr = {}", bodyStr);
@@ -380,6 +411,7 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
         public javax.swing.JComboBox<String> apiComboBox;
         public javax.swing.JCheckBox temporaryCheckBox;
         public javax.swing.JCheckBox cacheCheckBox;
+        public javax.swing.JCheckBox glossaryCheckBox;
         public javax.swing.JButton okButton;
         public javax.swing.JButton cancelButton;
 
@@ -412,6 +444,7 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
             apiComboBox = new JComboBox<>();
             temporaryCheckBox = new JCheckBox();
             cacheCheckBox = new JCheckBox(getString("MT_ENGINE_CACHE_BUTTON"), true);
+            glossaryCheckBox = new JCheckBox(getString("MT_ENGINE_GLOSSARY_BUTTON"), true);
 
             // 使用 GridBagLayout 添加组件
             GridBagConstraints gbc = new GridBagConstraints();
@@ -428,8 +461,10 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
             // 添加复选框
             gbc.gridx = 1;
             gbc.gridy = 6;
-            credentialsPanel.add(temporaryCheckBox, gbc);
+            credentialsPanel.add(glossaryCheckBox, gbc);
             gbc.gridy = 7;
+            credentialsPanel.add(temporaryCheckBox, gbc);
+            gbc.gridy = 8;
             credentialsPanel.add(cacheCheckBox, gbc);
 
             // 添加按钮面板
@@ -574,6 +609,7 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
                 Preferences.setPreference(PROPERTY_API_MODEL, (String) panel.modelComboBox.getSelectedItem());
                 Preferences.setPreference(PROPERTY_API_PROVIDER, (String) panel.apiComboBox.getSelectedItem());
                 Preferences.setPreference(PROPERTY_API_CACHE, panel.cacheCheckBox.isSelected());
+                Preferences.setPreference(PROPERTY_API_GLOSSARY, panel.glossaryCheckBox.isSelected());
             }
         };
 
@@ -588,6 +624,7 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
         panel.apiComboBox.setModel(new DefaultComboBoxModel<>(Providers));
         panel.apiComboBox.setSelectedItem(Preferences.getPreference(PROPERTY_API_PROVIDER));
         panel.temporaryCheckBox.setSelected(isCredentialStoredTemporarily(PROPERTY_API_KEY));
+        panel.glossaryCheckBox.setSelected(Boolean.parseBoolean(Preferences.getPreference(PROPERTY_API_GLOSSARY)));
 
         dialog.show();
     }
@@ -597,5 +634,15 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
         System.arraycopy(openaiModels, 0, combinedModels, 0, openaiModels.length);
         System.arraycopy(claudeModels, 0, combinedModels, openaiModels.length, claudeModels.length);
         return combinedModels;
+    }
+
+    private String truncateOrPad(String text, int length) {
+        if (text == null) {
+            text = "";
+        }
+        if (text.length() > length) {
+            return text.substring(0, length - 2) + "..";
+        }
+        return String.format("%-" + length + "s", text);
     }
 }
