@@ -214,7 +214,7 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
             provider = ("default".equals(provider) || "DeepSeek".equals(provider)) ? "OpenAI" : provider;
             // url += "/v1/chat/completions";
         }
-        // 检查 model 是否在 claudeModels 中
+        // 检查 model 是在 claudeModels 中
         else if (claudeModelsList.contains(model)) {
             provider = ("default".equals(provider)) ? "Claude" : provider;
             // url += "/v1/messages";
@@ -270,113 +270,147 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
         }
         String result = "";
         
-        if ("OpenAI".equals(provider)) {
-            Map<String, Object> bodyMap = MapUtil.<String, Object>builder()
-                    .put("model", model)
-                    .put(
-                            "messages",
-                            Arrays.asList(
-                                    MapUtil.<String, String>builder()
-                                            .put("role", "system")
-                                            .put("content", prompt)
-                                            .build(), // system prompt
-                                    MapUtil.<String, String>builder()
-                                            .put("role", "user")
-                                            .put("content", lvShortText)
-                                            .build() // user input
-                                    ))
-                    .put("temperature", temperature) // 可根据需要调整
-                    .build();
-            LOGGER.info("bodyMap = {}", bodyMap);
-            String bodyStr = JSONUtil.toJsonStr(bodyMap);
+        try {
+            HttpResponse response;
+            if ("OpenAI".equals(provider)) {
+                Map<String, Object> bodyMap = MapUtil.<String, Object>builder()
+                        .put("model", model)
+                        .put(
+                                "messages",
+                                Arrays.asList(
+                                        MapUtil.<String, String>builder()
+                                                .put("role", "system")
+                                                .put("content", prompt)
+                                                .build(), // system prompt
+                                        MapUtil.<String, String>builder()
+                                                .put("role", "user")
+                                                .put("content", lvShortText)
+                                                .build() // user input
+                                        ))
+                        .put("temperature", temperature) // 可根据需要调整
+                        .build();
+                LOGGER.info("bodyMap = {}", bodyMap);
+                String bodyStr = JSONUtil.toJsonStr(bodyMap);
+                LOGGER.debug("bodyStr = {}", bodyStr);
 
-            LOGGER.debug("bodyStr = {}", bodyStr);
+                HttpRequest post = HttpUtil.createPost(url)
+                        .header("Authorization", "Bearer " + apiKey)
+                        .header("Content-Type", "application/json")
+                        .body(bodyStr);
 
-            HttpRequest post = HttpUtil.createPost(url)
-                    .header("Authorization", "Bearer " + apiKey)
-                    .header("Content-Type", "application/json")
-                    .body(bodyStr);
-
-            HttpResponse response = post.execute();
-
-            final String responseBody = response.body();
-
-            LOGGER.debug("response body = {}", responseBody);
-
-            JSONObject jsonObject = JSONUtil.parseObj(responseBody);
-            LOGGER.debug("response jsonobject error_code = {}", jsonObject.getStr("error_code", "no error_code"));
-            if (!jsonObject.containsKey("error")) {
-                // 如果没有错误码，获取回复结果
-                JSONArray choices = jsonObject.getJSONArray("choices");
-                if (choices != null && !choices.isEmpty()) {
-                    result = choices.getJSONObject(0).getJSONObject("message").getStr("content", "[Cannot get output]");
-                    putToCache(sLang, tLang, lvShortText, result);
-                } else {
-                    result = "[Cannot get output]";
+                try {
+                    response = post.execute();
+                } catch (Exception e) {
+                    LOGGER.error("HTTP请求失败: {}", e.getMessage());
+                    // 根据异常类型返回不同的错误信息
+                    if (e.getCause() instanceof javax.net.ssl.SSLHandshakeException) {
+                        LOGGER.error("SSL握手失败: {}", e.getMessage());
+                        return getString("MT_ENGINE_OPENAI_SSL_ERROR");
+                    } else if (e.getCause() instanceof java.net.SocketException) {
+                        LOGGER.error("网络连接错误: {}", e.getMessage());
+                        return getString("MT_ENGINE_OPENAI_NETWORK_ERROR");
+                    } else {
+                        return String.format(getString("MT_ENGINE_OPENAI_REQUEST_ERROR"), e.getMessage());
+                    }
                 }
-            } else {
-                // 如果有错误码，处理错误信息
-                final String error = jsonObject.getStr("error");
-                if (error == null) {
-                    result = "error code null，no description";
+
+                final String responseBody = response.body();
+
+                LOGGER.debug("response body = {}", responseBody);
+
+                JSONObject jsonObject = JSONUtil.parseObj(responseBody);
+                LOGGER.debug("response jsonobject error_code = {}", jsonObject.getStr("error_code", "no error_code"));
+                if (!jsonObject.containsKey("error")) {
+                    // 如果没有错误码，获取回复结果
+                    JSONArray choices = jsonObject.getJSONArray("choices");
+                    if (choices != null && !choices.isEmpty()) {
+                        result = choices.getJSONObject(0).getJSONObject("message").getStr("content", "[Cannot get output]");
+                        putToCache(sLang, tLang, lvShortText, result);
+                    } else {
+                        result = "[Cannot get output]";
+                    }
                 } else {
-                    result = "error: " + error;
+                    // 如果有错误码，处理错误信息
+                    final String error = jsonObject.getStr("error");
+                    if (error == null) {
+                        result = "error code null，no description";
+                    } else {
+                        result = "error: " + error;
+                    }
+                }
+            } else if ("Claude".equals(provider)) {
+                Map<String, Object> bodyMap = MapUtil.<String, Object>builder()
+                        .put("model", model)
+                        .put("max_tokens", 4096)
+                        .put("system", prompt)
+                        .put(
+                                "messages",
+                                Arrays.asList(
+                                        MapUtil.<String, String>builder()
+                                                .put("role", "user")
+                                                .put("content", lvShortText)
+                                                .build() // user input
+                                        ))
+                        .put("temperature", temperature) // 可根据需要调整
+                        .build();
+                LOGGER.info("bodyMap = {}", bodyMap);
+                String bodyStr = JSONUtil.toJsonStr(bodyMap);
+                LOGGER.debug("bodyStr = {}", bodyStr);
+
+                HttpRequest post = HttpUtil.createPost(url)
+                        .header("x-api-key", apiKey)
+                        .header("anthropic-version", "2023-06-01")
+                        .header("Content-Type", "application/json")
+                        .body(bodyStr);
+
+                try {
+                    response = post.execute();
+                } catch (Exception e) {
+                    LOGGER.error("HTTP请求失败: {}", e.getMessage());
+                    // 根据异常类型返回不同的错误信息
+                    if (e.getCause() instanceof javax.net.ssl.SSLHandshakeException) {
+                        LOGGER.error("SSL握手失败: {}", e.getMessage());
+                        return getString("MT_ENGINE_OPENAI_SSL_ERROR");
+                    } else if (e.getCause() instanceof java.net.SocketException) {
+                        LOGGER.error("网络连接错误: {}", e.getMessage());
+                        return getString("MT_ENGINE_OPENAI_NETWORK_ERROR");
+                    } else {
+                        return String.format(getString("MT_ENGINE_OPENAI_REQUEST_ERROR"), e.getMessage());
+                    }
+                }
+
+                final String responseBody = response.body();
+
+                LOGGER.debug("response body = {}", responseBody);
+
+                JSONObject jsonObject = JSONUtil.parseObj(responseBody);
+                LOGGER.debug("response jsonobject error_code = {}", jsonObject.getStr("error_code", "no error_code"));
+                if (!jsonObject.containsKey("error")) {
+                    // 如果没有错误码，获取回复结果
+                    JSONArray content = jsonObject.getJSONArray("content");
+                    if (content != null && !content.isEmpty()) {
+                        result = content.getJSONObject(0).getStr("text", "[cannot get output]");
+                        putToCache(sLang, tLang, lvShortText, result);
+                    } else {
+                        result = "[cannot get output]";
+                    }
+                } else {
+                    // 如果有错误码，处理错误信息
+                    final String error = jsonObject.getStr("error");
+                    if (error == null) {
+                        result = "error code null，no description";
+                    } else {
+                        result = "error: " + error;
+                    }
                 }
             }
-        } else if ("Claude".equals(provider)) {
-            Map<String, Object> bodyMap = MapUtil.<String, Object>builder()
-                    .put("model", model)
-                    .put("max_tokens", 4096)
-                    .put("system", prompt)
-                    .put(
-                            "messages",
-                            Arrays.asList(
-                                    MapUtil.<String, String>builder()
-                                            .put("role", "user")
-                                            .put("content", lvShortText)
-                                            .build() // user input
-                                    ))
-                    .put("temperature", temperature) // 可根据需要调整
-                    .build();
-            LOGGER.info("bodyMap = {}", bodyMap);
-            String bodyStr = JSONUtil.toJsonStr(bodyMap);
-
-            LOGGER.debug("bodyStr = {}", bodyStr);
-
-            HttpRequest post = HttpUtil.createPost(url)
-                    .header("x-api-key", apiKey)
-                    .header("anthropic-version", "2023-06-01")
-                    .header("Content-Type", "application/json")
-                    .body(bodyStr);
-
-            HttpResponse response = post.execute();
-
-            final String responseBody = response.body();
-
-            LOGGER.debug("response body = {}", responseBody);
-
-            JSONObject jsonObject = JSONUtil.parseObj(responseBody);
-            LOGGER.debug("response jsonobject error_code = {}", jsonObject.getStr("error_code", "no error_code"));
-            if (!jsonObject.containsKey("error")) {
-                // 如果没有错误码，获取回复结果
-                JSONArray content = jsonObject.getJSONArray("content");
-                if (content != null && !content.isEmpty()) {
-                    result = content.getJSONObject(0).getStr("text", "[cannot get output]");
-                    putToCache(sLang, tLang, lvShortText, result);
-                } else {
-                    result = "[cannot get output]";
-                }
-            } else {
-                // 如果有错误码，处理错误信息
-                final String error = jsonObject.getStr("error");
-                if (error == null) {
-                    result = "error code null，no description";
-                } else {
-                    result = "error: " + error;
-                }
-            }
+            
+            return result;
+            
+        } catch (Exception e) {
+            LOGGER.error("翻译过程发生错误: {}", e.getMessage());
+            return String.format(getString("MT_ENGINE_OPENAI_GENERAL_ERROR"), e.getMessage());
         }
-        return result;
     }
 
     /**
