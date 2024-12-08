@@ -1,10 +1,19 @@
 /*
-参考了
-https://github.com/yoyicue/omegat-tencent-plugin
-https://github.com/omegat-org/omegat/blob/854b6b5a66a0306e5c27e74c0b5d656ed80b2bd4/src/org/omegat/core/machinetranslators/YandexTranslate.java
-GoogleTranslateWithoutApiKey
-omegat-niutrans-plugin
-的写法，感谢上述作者
+ * Copyright (C) 2024 Inertia
+ *
+ * 这是一个基于 LLM API 的 OmegaT 机器翻译插件
+ * This is an OmegaT machine translation plugin based on LLM API
+ *
+ * 本项目参考和借鉴了以下开源项目：
+ * This project references and learns from the following open source projects:
+ * - omegat-org/azure-translate-plugin
+ * - yoyicue/omegat-tencent-plugin
+ * - omegat-org/omegat (YandexTranslate.java)
+ * - GoogleTranslateWithoutApiKey
+ * - omegat-niutrans-plugin
+ *
+ * 本程序遵循 GNU 通用公共许可证第3版（GPL v3）
+ * This program is licensed under GNU General Public License v3
  */
 package xyz.inertia.machinetranslators.openaitrans;
 
@@ -47,9 +56,6 @@ import org.openide.awt.Mnemonics;
 
 public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTranslation {
 
-    /**
-     * 设置存储 key 的名字，读取和设置值由 OmegaT 提供 API 来操作.
-     */
     protected static final String PROPERTY_API_KEY = "openai.api.Key";
 
     protected static final String PROPERTY_API_URL = "openai.api.url";
