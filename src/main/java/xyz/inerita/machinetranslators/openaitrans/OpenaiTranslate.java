@@ -518,45 +518,74 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
 
         private JTextArea createMultiLineTextArea() {
             JTextArea textArea = new JTextArea();
-            textArea.setLineWrap(true);  // 启用自动换行
-            textArea.setWrapStyleWord(true);  // 按单词换行
-            textArea.setRows(1);  // 初始行数
+            textArea.setLineWrap(true);
+            textArea.setWrapStyleWord(true);
             
-            // 设置首选大小
-            textArea.setPreferredSize(new Dimension(300, textArea.getFont().getSize() + 4));
+            // 设置基础参数
+            int minRows = 1;
+            int maxRows = 5;
+            int minWidth = 200;
+            int maxWidth = 400;
+            int padding = 2; // 文本区域内边距
             
-            // 添加文档监听器来处理自动调整大小
+            // 获取字体度量以准确计算文本高度
+            FontMetrics fm = textArea.getFontMetrics(textArea.getFont());
+            int lineHeight = fm.getHeight();
+            
+            // 设置初始大小
+            Dimension minSize = new Dimension(minWidth, lineHeight * minRows + 2 * padding);
+            Dimension maxSize = new Dimension(maxWidth, lineHeight * maxRows + 2 * padding);
+            
+            textArea.setMinimumSize(minSize);
+            textArea.setMaximumSize(maxSize);
+            textArea.setPreferredSize(minSize);
+            
             textArea.getDocument().addDocumentListener(new DocumentListener() {
                 private void updateSize() {
-                    String text = textArea.getText();
-                    // 计算需要的行数
-                    int rows = Math.max(1, (text.length() * textArea.getFont().getSize()) / 300 + 1);
-                    textArea.setRows(rows);
-                    // 更新大小
-                    textArea.setPreferredSize(new Dimension(300, textArea.getFont().getSize() * rows + 4));
-                    textArea.revalidate();
+                    SwingUtilities.invokeLater(() -> {
+                        try {
+                            // 获取文本区域的实际内容
+                            String text = textArea.getText();
+                            Rectangle viewRect = textArea.getVisibleRect();
+                            
+                            // 计算需要的行数
+                            int availableWidth = Math.max(minWidth, viewRect.width - 2 * padding);
+                            int textWidth = fm.stringWidth(text);
+                            int estimatedRows = Math.max(minRows, 
+                                    Math.min(maxRows, 
+                                        (int)Math.ceil((double)textWidth / availableWidth)));
+                            
+                            // 计算新的首选高度
+                            int newHeight = lineHeight * estimatedRows + 2 * padding;
+                            
+                            // 设置新的首选大小
+                            Dimension newSize = new Dimension(
+                                    Math.min(maxWidth, Math.max(minWidth, viewRect.width)),
+                                    newHeight);
+                            
+                            if (!textArea.getPreferredSize().equals(newSize)) {
+                                textArea.setPreferredSize(newSize);
+                                textArea.revalidate();
+                            }
+                        } catch (Exception e) {
+                            // 处理可能的异常
+                            LOGGER.error("更新文本区域大小时出错", e);
+                        }
+                    });
                 }
 
                 @Override
-                public void insertUpdate(DocumentEvent e) {
-                    updateSize();
-                }
-
+                public void insertUpdate(DocumentEvent e) { updateSize(); }
+                @Override 
+                public void removeUpdate(DocumentEvent e) { updateSize(); }
                 @Override
-                public void removeUpdate(DocumentEvent e) {
-                    updateSize();
-                }
-
-                @Override
-                public void changedUpdate(DocumentEvent e) {
-                    updateSize();
-                }
+                public void changedUpdate(DocumentEvent e) { updateSize(); }
             });
 
-            // 设置边框，让它看起来像 TextField
+            // 设置边框和外观
             textArea.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(Color.GRAY),
-                BorderFactory.createEmptyBorder(2, 2, 2, 2)
+                BorderFactory.createEmptyBorder(padding, padding, padding, padding)
             ));
 
             return textArea;
@@ -590,8 +619,11 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
         public OpenAIConfigDialog(Window parent, String title) {
             dialog = new JDialog(parent, title, Dialog.ModalityType.APPLICATION_MODAL);
             panel = new OpenAIConfigPanel();
+
+            JScrollPane scrollPane = new JScrollPane(panel);
+            scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
             
-            dialog.getContentPane().add(panel);
+            dialog.getContentPane().add(scrollPane);
             
             panel.cancelButton.addActionListener(e -> dialog.dispose());
             panel.okButton.addActionListener(e -> {
@@ -608,6 +640,7 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
         }
 
         public void show() {
+            dialog.setPreferredSize(new Dimension(600, 500));
             dialog.pack();
             dialog.setLocationRelativeTo(dialog.getOwner());
             dialog.setVisible(true);
