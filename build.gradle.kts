@@ -95,7 +95,7 @@ val jar by tasks.getting(Jar::class) {
 spotless {
     java {
         target(listOf("src/*/java/**/*.java"))
-        removeUnusedImports()
+        // removeUnusedImports()
         palantirJavaFormat()
         importOrder("org.omegat", "java", "javax", "", "\\#")
     }

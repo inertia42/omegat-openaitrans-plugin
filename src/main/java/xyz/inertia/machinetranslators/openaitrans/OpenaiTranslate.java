@@ -20,7 +20,6 @@ package xyz.inertia.machinetranslators.openaitrans;
 import org.omegat.core.Core;
 import org.omegat.core.machinetranslators.BaseCachedTranslate;
 import org.omegat.gui.exttrans.IMachineTranslation;
-import org.omegat.gui.exttrans.MTConfigDialog;
 import org.omegat.util.CredentialsManager;
 import org.omegat.util.Language;
 import org.omegat.util.OStrings;
@@ -29,6 +28,7 @@ import org.omegat.util.StringUtil;
 import org.omegat.util.gui.StaticUIUtils;
 
 import java.awt.*;
+import java.awt.Color;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.Arrays;
@@ -37,11 +37,10 @@ import java.util.Map;
 import java.util.ResourceBundle;
 
 import javax.swing.*;
+import javax.swing.JScrollPane;
+import javax.swing.JTextArea;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
-import javax.swing.JTextArea;
-import javax.swing.JScrollPane;
-import java.awt.Color;
 
 import cn.hutool.core.map.MapUtil;
 import cn.hutool.http.HttpRequest;
@@ -50,9 +49,9 @@ import cn.hutool.http.HttpUtil;
 import cn.hutool.json.JSONArray;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
+import org.openide.awt.Mnemonics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.openide.awt.Mnemonics;
 
 public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTranslation {
 
@@ -212,7 +211,6 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
             return getString("MT_ENGINE_OPENAI_API_URL_NOTFOUND");
         }
 
-
         List<String> openaiModelsList = Arrays.asList(openaiModels);
         List<String> claudeModelsList = Arrays.asList(claudeModels);
 
@@ -246,7 +244,6 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
             prompt = defaultPrompt;
         }
 
-        
         // LOGGER.info("prompt = {}", prompt);
 
         // 判断翻译缓存里有没有
@@ -260,22 +257,21 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
         // 添加 glossary 信息
         StringBuilder glossaryTable = new StringBuilder();
         if ("true".equals(enableGlossary)) {
-            List<org.omegat.gui.glossary.GlossaryEntry> entries = Core.getGlossaryManager().searchSourceMatches(Core.getEditor().getCurrentEntry());
+            List<org.omegat.gui.glossary.GlossaryEntry> entries = Core.getGlossaryManager()
+                    .searchSourceMatches(Core.getEditor().getCurrentEntry());
             if (!entries.isEmpty()) {
                 glossaryTable.append("\nYou can refer to the following glossary when translating:\n");
-                
+
                 for (org.omegat.gui.glossary.GlossaryEntry entry : entries) {
-                    glossaryTable.append(String.format("src: %s, loc: %s, comment: %s\n",
-                        entry.getSrcText(),
-                        entry.getLocText(),
-                        entry.getCommentText()
-                    ));
+                    glossaryTable.append(String.format(
+                            "src: %s, loc: %s, comment: %s\n",
+                            entry.getSrcText(), entry.getLocText(), entry.getCommentText()));
                 }
                 prompt = prompt + glossaryTable.toString();
             }
         }
         String result = "";
-        
+
         try {
             HttpResponse response;
             if ("OpenAI".equals(provider)) {
@@ -330,7 +326,9 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
                     // 如果没有错误码，获取回复结果
                     JSONArray choices = jsonObject.getJSONArray("choices");
                     if (choices != null && !choices.isEmpty()) {
-                        result = choices.getJSONObject(0).getJSONObject("message").getStr("content", "[Cannot get output]");
+                        result = choices.getJSONObject(0)
+                                .getJSONObject("message")
+                                .getStr("content", "[Cannot get output]");
                         putToCache(sLang, tLang, lvShortText, result);
                     } else {
                         result = "[Cannot get output]";
@@ -410,9 +408,9 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
                     }
                 }
             }
-            
+
             return result;
-            
+
         } catch (Exception e) {
             LOGGER.error("翻译过程发生错误: {}", e.getMessage());
             return String.format(getString("MT_ENGINE_OPENAI_GENERAL_ERROR"), e.getMessage());
@@ -458,13 +456,13 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
             descriptionTextArea = new JTextArea();
             itemsPanel = new JPanel();
             credentialsPanel = new JPanel(new GridBagLayout());
-            
+
             // 设置文本区域属性
             descriptionTextArea.setEditable(false);
             descriptionTextArea.setLineWrap(true);
             descriptionTextArea.setWrapStyleWord(true);
             descriptionTextArea.setOpaque(false);
-            
+
             // 创建输入组件
             apiKeyField = createMultiLineTextArea();
             urlField = new JTextField();
@@ -480,7 +478,7 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
             GridBagConstraints gbc = new GridBagConstraints();
             gbc.insets = new Insets(5, 5, 5, 5);
             gbc.fill = GridBagConstraints.HORIZONTAL;
-            
+
             addLabelAndField(credentialsPanel, "MT_ENGINE_OPENAI_KEY_LABEL", apiKeyField, gbc, 0);
             addLabelAndField(credentialsPanel, "MT_ENGINE_OPENAI_URL_LABEL", urlField, gbc, 1);
             addLabelAndField(credentialsPanel, "MT_ENGINE_OPENAI_PROMPT_LABEL", promptField, gbc, 2);
@@ -520,26 +518,26 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
             JTextArea textArea = new JTextArea();
             textArea.setLineWrap(true);
             textArea.setWrapStyleWord(true);
-            
+
             // 设置基础参数
             int minRows = 1;
             int maxRows = 5;
             int minWidth = 200;
             int maxWidth = 400;
             int padding = 2; // 文本区域内边距
-            
+
             // 获取字体度量以准确计算文本高度
             FontMetrics fm = textArea.getFontMetrics(textArea.getFont());
             int lineHeight = fm.getHeight();
-            
+
             // 设置初始大小
             Dimension minSize = new Dimension(minWidth, lineHeight * minRows + 2 * padding);
             Dimension maxSize = new Dimension(maxWidth, lineHeight * maxRows + 2 * padding);
-            
+
             textArea.setMinimumSize(minSize);
             textArea.setMaximumSize(maxSize);
             textArea.setPreferredSize(minSize);
-            
+
             textArea.getDocument().addDocumentListener(new DocumentListener() {
                 private void updateSize() {
                     SwingUtilities.invokeLater(() -> {
@@ -547,22 +545,20 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
                             // 获取文本区域的实际内容
                             String text = textArea.getText();
                             Rectangle viewRect = textArea.getVisibleRect();
-                            
+
                             // 计算需要的行数
                             int availableWidth = Math.max(minWidth, viewRect.width - 2 * padding);
                             int textWidth = fm.stringWidth(text);
-                            int estimatedRows = Math.max(minRows, 
-                                    Math.min(maxRows, 
-                                        (int)Math.ceil((double)textWidth / availableWidth)));
-                            
+                            int estimatedRows = Math.max(
+                                    minRows, Math.min(maxRows, (int) Math.ceil((double) textWidth / availableWidth)));
+
                             // 计算新的首选高度
                             int newHeight = lineHeight * estimatedRows + 2 * padding;
-                            
+
                             // 设置新的首选大小
-                            Dimension newSize = new Dimension(
-                                    Math.min(maxWidth, Math.max(minWidth, viewRect.width)),
-                                    newHeight);
-                            
+                            Dimension newSize =
+                                    new Dimension(Math.min(maxWidth, Math.max(minWidth, viewRect.width)), newHeight);
+
                             if (!textArea.getPreferredSize().equals(newSize)) {
                                 textArea.setPreferredSize(newSize);
                                 textArea.revalidate();
@@ -575,28 +571,36 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
                 }
 
                 @Override
-                public void insertUpdate(DocumentEvent e) { updateSize(); }
-                @Override 
-                public void removeUpdate(DocumentEvent e) { updateSize(); }
+                public void insertUpdate(DocumentEvent e) {
+                    updateSize();
+                }
+
                 @Override
-                public void changedUpdate(DocumentEvent e) { updateSize(); }
+                public void removeUpdate(DocumentEvent e) {
+                    updateSize();
+                }
+
+                @Override
+                public void changedUpdate(DocumentEvent e) {
+                    updateSize();
+                }
             });
 
             // 设置边框和外观
             textArea.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(Color.GRAY),
-                BorderFactory.createEmptyBorder(padding, padding, padding, padding)
-            ));
+                    BorderFactory.createLineBorder(Color.GRAY),
+                    BorderFactory.createEmptyBorder(padding, padding, padding, padding)));
 
             return textArea;
         }
 
-        private void addLabelAndField(JPanel panel, String labelKey, JComponent field, GridBagConstraints gbc, int row) {
+        private void addLabelAndField(
+                JPanel panel, String labelKey, JComponent field, GridBagConstraints gbc, int row) {
             gbc.gridx = 0;
             gbc.gridy = row;
             gbc.weightx = 0.0;
             panel.add(new JLabel(getString(labelKey)), gbc);
-            
+
             gbc.gridx = 1;
             gbc.weightx = 1.0;
             // 如果是 JTextArea，用 JScrollPane 包装
@@ -622,15 +626,15 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
 
             JScrollPane scrollPane = new JScrollPane(panel);
             scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
-            
+
             dialog.getContentPane().add(scrollPane);
-            
+
             panel.cancelButton.addActionListener(e -> dialog.dispose());
             panel.okButton.addActionListener(e -> {
                 onConfirm();
                 dialog.dispose();
             });
-            
+
             StaticUIUtils.setEscapeClosable(dialog);
             dialog.getRootPane().setDefaultButton(panel.okButton);
         }
@@ -661,14 +665,18 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
             protected void onConfirm() {
                 OpenAIConfigPanel panel = getPanel();
                 boolean temporary = panel.temporaryCheckBox.isSelected();
-                
+
                 // 保存凭证信息
                 setCredential(PROPERTY_API_KEY, panel.apiKeyField.getText().trim(), temporary);
-                Preferences.setPreference(PROPERTY_API_URL, panel.urlField.getText().trim());
-                
+                Preferences.setPreference(
+                        PROPERTY_API_URL, panel.urlField.getText().trim());
+
                 // 保存其他设置到 Preferences
-                Preferences.setPreference(PROPERTY_API_PROMPT, panel.promptField.getText().trim());
-                Preferences.setPreference(PROPERTY_API_TEMPERATURE, panel.temperatureField.getText().trim());
+                Preferences.setPreference(
+                        PROPERTY_API_PROMPT, panel.promptField.getText().trim());
+                Preferences.setPreference(
+                        PROPERTY_API_TEMPERATURE,
+                        panel.temperatureField.getText().trim());
                 Preferences.setPreference(PROPERTY_API_MODEL, (String) panel.modelComboBox.getSelectedItem());
                 Preferences.setPreference(PROPERTY_API_PROVIDER, (String) panel.apiComboBox.getSelectedItem());
                 Preferences.setPreference(PROPERTY_API_CACHE, panel.cacheCheckBox.isSelected());
