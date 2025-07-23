@@ -194,6 +194,9 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
         String url = Preferences.getPreference(PROPERTY_API_URL);
         String model = Preferences.getPreference(PROPERTY_API_MODEL);
         String temperature_str = Preferences.getPreference(PROPERTY_API_TEMPERATURE);
+        if (temperature_str == null || temperature_str.trim().isEmpty()) {
+            temperature_str = "0";
+        }
         String provider = Preferences.getPreference(PROPERTY_API_PROVIDER);
         String prompt = Preferences.getPreference(PROPERTY_API_PROMPT);
         String enableCache = Preferences.getPreference(PROPERTY_API_CACHE);
