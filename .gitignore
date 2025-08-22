@@ -30,3 +30,6 @@ nbproject
 
 #mine
 gradle
+
+# Claude configuration
+CLAUDE.md

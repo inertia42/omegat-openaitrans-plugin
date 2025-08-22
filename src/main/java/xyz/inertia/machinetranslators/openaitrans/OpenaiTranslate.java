@@ -32,6 +32,7 @@ import java.awt.Color;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.ResourceBundle;
@@ -42,13 +43,13 @@ import javax.swing.JTextArea;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 
-import cn.hutool.core.map.MapUtil;
-import cn.hutool.http.HttpRequest;
-import cn.hutool.http.HttpResponse;
-import cn.hutool.http.HttpUtil;
-import cn.hutool.json.JSONArray;
-import cn.hutool.json.JSONObject;
-import cn.hutool.json.JSONUtil;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
 import org.openide.awt.Mnemonics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -89,6 +90,9 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
     protected static final String[] Providers = {"default", "OpenAI", "Claude", "DeepSeek"};
 
     protected static final Logger LOGGER = LoggerFactory.getLogger(OpenaiTranslate.class);
+
+    private final OkHttpClient httpClient = new OkHttpClient();
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     static String getString(String key) {
         return BUNDLE.getString(key);
@@ -276,35 +280,37 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
         String result = "";
 
         try {
-            HttpResponse response;
+            Response response;
             if ("OpenAI".equals(provider)) {
-                Map<String, Object> bodyMap = MapUtil.<String, Object>builder()
-                        .put("model", model)
-                        .put(
-                                "messages",
-                                Arrays.asList(
-                                        MapUtil.<String, String>builder()
-                                                .put("role", "system")
-                                                .put("content", prompt)
-                                                .build(), // system prompt
-                                        MapUtil.<String, String>builder()
-                                                .put("role", "user")
-                                                .put("content", lvShortText)
-                                                .build() // user input
-                                        ))
-                        .put("temperature", temperature) // 可根据需要调整
-                        .build();
+                // 构建消息列表
+                Map<String, String> systemMessage = new HashMap<>();
+                systemMessage.put("role", "system");
+                systemMessage.put("content", prompt);
+
+                Map<String, String> userMessage = new HashMap<>();
+                userMessage.put("role", "user");
+                userMessage.put("content", lvShortText);
+
+                // 构建请求体
+                Map<String, Object> bodyMap = new HashMap<>();
+                bodyMap.put("model", model);
+                bodyMap.put("messages", Arrays.asList(systemMessage, userMessage));
+                bodyMap.put("temperature", temperature);
+
                 LOGGER.info("bodyMap = {}", bodyMap);
-                String bodyStr = JSONUtil.toJsonStr(bodyMap);
+                String bodyStr = objectMapper.writeValueAsString(bodyMap);
                 LOGGER.debug("bodyStr = {}", bodyStr);
 
-                HttpRequest post = HttpUtil.createPost(url)
+                RequestBody requestBody = RequestBody.create(bodyStr, MediaType.get("application/json"));
+                Request request = new Request.Builder()
+                        .url(url)
                         .header("Authorization", "Bearer " + apiKey)
                         .header("Content-Type", "application/json")
-                        .body(bodyStr);
+                        .post(requestBody)
+                        .build();
 
                 try {
-                    response = post.execute();
+                    response = httpClient.newCall(request).execute();
                 } catch (Exception e) {
                     LOGGER.error("HTTP请求失败: {}", e.getMessage());
                     // 根据异常类型返回不同的错误信息
@@ -319,59 +325,63 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
                     }
                 }
 
-                final String responseBody = response.body();
+                final String responseBody = response.body().string();
 
                 LOGGER.debug("response body = {}", responseBody);
 
-                JSONObject jsonObject = JSONUtil.parseObj(responseBody);
-                LOGGER.debug("response jsonobject error_code = {}", jsonObject.getStr("error_code", "no error_code"));
-                if (!jsonObject.containsKey("error")) {
+                JsonNode jsonNode = objectMapper.readTree(responseBody);
+                JsonNode errorNode = jsonNode.get("error");
+                LOGGER.debug("response jsonobject error_code = {}", errorNode != null ? "has error" : "no error_code");
+                if (errorNode == null) {
                     // 如果没有错误码，获取回复结果
-                    JSONArray choices = jsonObject.getJSONArray("choices");
-                    if (choices != null && !choices.isEmpty()) {
-                        result = choices.getJSONObject(0)
-                                .getJSONObject("message")
-                                .getStr("content", "[Cannot get output]");
+                    JsonNode choicesArray = jsonNode.get("choices");
+                    if (choicesArray != null && choicesArray.isArray() && choicesArray.size() > 0) {
+                        JsonNode contentNode =
+                                choicesArray.get(0).get("message").get("content");
+                        result = contentNode != null ? contentNode.asText() : "[Cannot get output]";
                         putToCache(sLang, tLang, lvShortText, result);
                     } else {
                         result = "[Cannot get output]";
                     }
                 } else {
                     // 如果有错误码，处理错误信息
-                    final String error = jsonObject.getStr("error");
-                    if (error == null) {
+                    String error = errorNode.asText();
+                    if (error == null || error.isEmpty()) {
                         result = "error code null，no description";
                     } else {
                         result = "error: " + error;
                     }
                 }
+                response.close();
             } else if ("Claude".equals(provider)) {
-                Map<String, Object> bodyMap = MapUtil.<String, Object>builder()
-                        .put("model", model)
-                        .put("max_tokens", 4096)
-                        .put("system", prompt)
-                        .put(
-                                "messages",
-                                Arrays.asList(
-                                        MapUtil.<String, String>builder()
-                                                .put("role", "user")
-                                                .put("content", lvShortText)
-                                                .build() // user input
-                                        ))
-                        .put("temperature", temperature) // 可根据需要调整
-                        .build();
+                // 构建消息列表
+                Map<String, String> userMessage = new HashMap<>();
+                userMessage.put("role", "user");
+                userMessage.put("content", lvShortText);
+
+                // 构建请求体
+                Map<String, Object> bodyMap = new HashMap<>();
+                bodyMap.put("model", model);
+                bodyMap.put("max_tokens", 4096);
+                bodyMap.put("system", prompt);
+                bodyMap.put("messages", Arrays.asList(userMessage));
+                bodyMap.put("temperature", temperature);
+
                 LOGGER.info("bodyMap = {}", bodyMap);
-                String bodyStr = JSONUtil.toJsonStr(bodyMap);
+                String bodyStr = objectMapper.writeValueAsString(bodyMap);
                 LOGGER.debug("bodyStr = {}", bodyStr);
 
-                HttpRequest post = HttpUtil.createPost(url)
+                RequestBody requestBody = RequestBody.create(bodyStr, MediaType.get("application/json"));
+                Request request = new Request.Builder()
+                        .url(url)
                         .header("x-api-key", apiKey)
                         .header("anthropic-version", "2023-06-01")
                         .header("Content-Type", "application/json")
-                        .body(bodyStr);
+                        .post(requestBody)
+                        .build();
 
                 try {
-                    response = post.execute();
+                    response = httpClient.newCall(request).execute();
                 } catch (Exception e) {
                     LOGGER.error("HTTP请求失败: {}", e.getMessage());
                     // 根据异常类型返回不同的错误信息
@@ -386,30 +396,33 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
                     }
                 }
 
-                final String responseBody = response.body();
+                final String responseBody = response.body().string();
 
                 LOGGER.debug("response body = {}", responseBody);
 
-                JSONObject jsonObject = JSONUtil.parseObj(responseBody);
-                LOGGER.debug("response jsonobject error_code = {}", jsonObject.getStr("error_code", "no error_code"));
-                if (!jsonObject.containsKey("error")) {
+                JsonNode jsonNode = objectMapper.readTree(responseBody);
+                JsonNode errorNode = jsonNode.get("error");
+                LOGGER.debug("response jsonobject error_code = {}", errorNode != null ? "has error" : "no error_code");
+                if (errorNode == null) {
                     // 如果没有错误码，获取回复结果
-                    JSONArray content = jsonObject.getJSONArray("content");
-                    if (content != null && !content.isEmpty()) {
-                        result = content.getJSONObject(0).getStr("text", "[cannot get output]");
+                    JsonNode contentArray = jsonNode.get("content");
+                    if (contentArray != null && contentArray.isArray() && contentArray.size() > 0) {
+                        JsonNode textNode = contentArray.get(0).get("text");
+                        result = textNode != null ? textNode.asText() : "[cannot get output]";
                         putToCache(sLang, tLang, lvShortText, result);
                     } else {
                         result = "[cannot get output]";
                     }
                 } else {
                     // 如果有错误码，处理错误信息
-                    final String error = jsonObject.getStr("error");
-                    if (error == null) {
+                    String error = errorNode.asText();
+                    if (error == null || error.isEmpty()) {
                         result = "error code null，no description";
                     } else {
                         result = "error: " + error;
                     }
                 }
+                response.close();
             }
 
             return result;
