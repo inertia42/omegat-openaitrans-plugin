@@ -45,11 +45,11 @@ import javax.swing.event.DocumentListener;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import okhttp3.MediaType;
-import okhttp3.OkHttpClient;
-import okhttp3.Request;
-import okhttp3.RequestBody;
-import okhttp3.Response;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
 import org.openide.awt.Mnemonics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -60,6 +60,8 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
 
     protected static final String PROPERTY_API_URL = "openai.api.url";
     protected static final String PROPERTY_API_MODEL = "openai.api.model";
+    protected static final String PROPERTY_API_CUSTOM_MODEL = "openai.api.custom.model";
+    protected static final String PROPERTY_USE_CUSTOM_MODEL = "openai.api.use.custom.model";
     protected static final String PROPERTY_API_PROVIDER = "openai.api.format";
     protected static final String PROPERTY_API_PROMPT = "openai.api.prompt";
     protected static final String PROPERTY_API_TEMPERATURE = "openai.api.temperature";
@@ -91,7 +93,9 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
 
     protected static final Logger LOGGER = LoggerFactory.getLogger(OpenaiTranslate.class);
 
-    private final OkHttpClient httpClient = new OkHttpClient();
+    private final HttpClient httpClient = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(30))
+            .build();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     static String getString(String key) {
@@ -218,21 +222,33 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
             return getString("MT_ENGINE_OPENAI_API_URL_NOTFOUND");
         }
 
-        List<String> openaiModelsList = Arrays.asList(openaiModels);
-        List<String> claudeModelsList = Arrays.asList(claudeModels);
+        // 处理自定义模型
+        boolean useCustomModel = Boolean.parseBoolean(Preferences.getPreference(PROPERTY_USE_CUSTOM_MODEL));
+        if (useCustomModel) {
+            String customModel = Preferences.getPreference(PROPERTY_API_CUSTOM_MODEL);
+            if (customModel != null && !customModel.trim().isEmpty()) {
+                model = customModel.trim();
+            } else {
+                return getString("MT_ENGINE_OPENAI_CUSTOM_MODEL_EMPTY");
+            }
+            // 对于自定义模型，不自动设置 provider，保持用户选择
+        } else {
+            List<String> openaiModelsList = Arrays.asList(openaiModels);
+            List<String> claudeModelsList = Arrays.asList(claudeModels);
 
-        if (openaiModelsList.contains(model)) {
-            provider = ("default".equals(provider) || "DeepSeek".equals(provider)) ? "OpenAI" : provider;
-            // url += "/v1/chat/completions";
-        }
-        // 检查 model 是在 claudeModels 中
-        else if (claudeModelsList.contains(model)) {
-            provider = ("default".equals(provider)) ? "Claude" : provider;
-            // url += "/v1/messages";
-        }
-        // 如果 model 不在任何一个列表中
-        else {
-            return "An unsupported model was used!";
+            if (openaiModelsList.contains(model)) {
+                provider = ("default".equals(provider) || "DeepSeek".equals(provider)) ? "OpenAI" : provider;
+                // url += "/v1/chat/completions";
+            }
+            // 检查 model 是在 claudeModels 中
+            else if (claudeModelsList.contains(model)) {
+                provider = ("default".equals(provider)) ? "Claude" : provider;
+                // url += "/v1/messages";
+            }
+            // 如果 model 不在任何一个列表中
+            else {
+                return "An unsupported model was used!";
+            }
         }
 
         if ("OpenAI".equals(provider)) {
@@ -280,7 +296,7 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
         String result = "";
 
         try {
-            Response response;
+            HttpResponse<String> response;
             if ("OpenAI".equals(provider)) {
                 // 构建消息列表
                 Map<String, String> systemMessage = new HashMap<>();
@@ -301,16 +317,16 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
                 String bodyStr = objectMapper.writeValueAsString(bodyMap);
                 LOGGER.debug("bodyStr = {}", bodyStr);
 
-                RequestBody requestBody = RequestBody.create(bodyStr, MediaType.get("application/json"));
-                Request request = new Request.Builder()
-                        .url(url)
+                HttpRequest request = HttpRequest.newBuilder()
+                        .uri(URI.create(url))
                         .header("Authorization", "Bearer " + apiKey)
                         .header("Content-Type", "application/json")
-                        .post(requestBody)
+                        .timeout(Duration.ofSeconds(60))
+                        .POST(HttpRequest.BodyPublishers.ofString(bodyStr))
                         .build();
 
                 try {
-                    response = httpClient.newCall(request).execute();
+                    response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
                 } catch (Exception e) {
                     LOGGER.error("HTTP请求失败: {}", e.getMessage());
                     // 根据异常类型返回不同的错误信息
@@ -325,7 +341,7 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
                     }
                 }
 
-                final String responseBody = response.body().string();
+                final String responseBody = response.body();
 
                 LOGGER.debug("response body = {}", responseBody);
 
@@ -352,7 +368,6 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
                         result = "error: " + error;
                     }
                 }
-                response.close();
             } else if ("Claude".equals(provider)) {
                 // 构建消息列表
                 Map<String, String> userMessage = new HashMap<>();
@@ -371,17 +386,17 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
                 String bodyStr = objectMapper.writeValueAsString(bodyMap);
                 LOGGER.debug("bodyStr = {}", bodyStr);
 
-                RequestBody requestBody = RequestBody.create(bodyStr, MediaType.get("application/json"));
-                Request request = new Request.Builder()
-                        .url(url)
+                HttpRequest request = HttpRequest.newBuilder()
+                        .uri(URI.create(url))
                         .header("x-api-key", apiKey)
                         .header("anthropic-version", "2023-06-01")
                         .header("Content-Type", "application/json")
-                        .post(requestBody)
+                        .timeout(Duration.ofSeconds(60))
+                        .POST(HttpRequest.BodyPublishers.ofString(bodyStr))
                         .build();
 
                 try {
-                    response = httpClient.newCall(request).execute();
+                    response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
                 } catch (Exception e) {
                     LOGGER.error("HTTP请求失败: {}", e.getMessage());
                     // 根据异常类型返回不同的错误信息
@@ -396,7 +411,7 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
                     }
                 }
 
-                final String responseBody = response.body().string();
+                final String responseBody = response.body();
 
                 LOGGER.debug("response body = {}", responseBody);
 
@@ -422,7 +437,6 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
                         result = "error: " + error;
                     }
                 }
-                response.close();
             }
 
             return result;
@@ -453,6 +467,9 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
         public javax.swing.JTextField temperatureField;
         public javax.swing.JComboBox<String> modelComboBox;
         public javax.swing.JComboBox<String> apiComboBox;
+        public javax.swing.JTextField customModelField;
+        public javax.swing.JCheckBox useCustomModelCheckBox;
+        private boolean isUpdatingModelComboBox = false;
         public javax.swing.JCheckBox temporaryCheckBox;
         public javax.swing.JCheckBox cacheCheckBox;
         public javax.swing.JCheckBox glossaryCheckBox;
@@ -486,6 +503,15 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
             temperatureField = new JTextField();
             modelComboBox = new JComboBox<>();
             apiComboBox = new JComboBox<>();
+            customModelField = new JTextField();
+            useCustomModelCheckBox = new JCheckBox(getString("MT_ENGINE_USE_CUSTOM_MODEL_LABEL"));
+            customModelField.setVisible(false);
+            
+            // 添加复选框事件监听
+            useCustomModelCheckBox.addActionListener(e -> {
+                boolean useCustom = useCustomModelCheckBox.isSelected();
+                handleCustomModelToggle(useCustom);
+            });
             temporaryCheckBox = new JCheckBox();
             cacheCheckBox = new JCheckBox(getString("MT_ENGINE_CACHE_BUTTON"), true);
             glossaryCheckBox = new JCheckBox(getString("MT_ENGINE_GLOSSARY_BUTTON"), true);
@@ -500,15 +526,22 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
             addLabelAndField(credentialsPanel, "MT_ENGINE_OPENAI_PROMPT_LABEL", promptField, gbc, 2);
             addLabelAndField(credentialsPanel, "MT_ENGINE_OPENAI_TEMPERATURE_LABEL", temperatureField, gbc, 3);
             addLabelAndField(credentialsPanel, "MT_ENGINE_OPENAI_MODEL_NAME_LABEL", modelComboBox, gbc, 4);
+            // 在同一位置添加自定义模型输入框，但初始隐藏
+            gbc.gridx = 1;
+            gbc.gridy = 4;
+            gbc.weightx = 1.0;
+            credentialsPanel.add(customModelField, gbc);
             addLabelAndField(credentialsPanel, "MT_ENGINE_OPENAI_API_FORMAT_LABEL", apiComboBox, gbc, 5);
 
             // 添加复选框
             gbc.gridx = 1;
             gbc.gridy = 6;
-            credentialsPanel.add(glossaryCheckBox, gbc);
+            credentialsPanel.add(useCustomModelCheckBox, gbc);
             gbc.gridy = 7;
-            credentialsPanel.add(temporaryCheckBox, gbc);
+            credentialsPanel.add(glossaryCheckBox, gbc);
             gbc.gridy = 8;
+            credentialsPanel.add(temporaryCheckBox, gbc);
+            gbc.gridy = 9;
             credentialsPanel.add(cacheCheckBox, gbc);
 
             // 添加按钮面板
@@ -609,6 +642,50 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
 
             return textArea;
         }
+        
+        
+        private void handleCustomModelToggle(boolean useCustom) {
+            SwingUtilities.invokeLater(() -> {
+                if (useCustom) {
+                    // 隐藏下拉框，显示输入框
+                    modelComboBox.setVisible(false);
+                    customModelField.setVisible(true);
+                    updateApiComboBoxForCustom();
+                } else {
+                    // 显示下拉框，隐藏输入框
+                    customModelField.setVisible(false);
+                    modelComboBox.setVisible(true);
+                    restoreOriginalApiComboBox();
+                }
+                credentialsPanel.revalidate();
+                credentialsPanel.repaint();
+            });
+        }
+        
+        private void updateApiComboBoxForCustom() {
+            String[] providersWithoutDefault = {"OpenAI", "Claude", "DeepSeek"};
+            String currentSelection = (String) apiComboBox.getSelectedItem();
+            apiComboBox.setModel(new DefaultComboBoxModel<>(providersWithoutDefault));
+            
+            // 如果当前选择是 default，自动切换到 OpenAI
+            if ("default".equals(currentSelection)) {
+                apiComboBox.setSelectedItem("OpenAI");
+            } else if (Arrays.asList(providersWithoutDefault).contains(currentSelection)) {
+                apiComboBox.setSelectedItem(currentSelection);
+            } else {
+                apiComboBox.setSelectedItem("OpenAI");
+            }
+        }
+        
+        private void restoreOriginalApiComboBox() {
+            String currentSelection = (String) apiComboBox.getSelectedItem();
+            apiComboBox.setModel(new DefaultComboBoxModel<>(Providers));
+            
+            // 恢复之前的选择，如果仍然有效的话
+            if (Arrays.asList(Providers).contains(currentSelection)) {
+                apiComboBox.setSelectedItem(currentSelection);
+            }
+        }
 
         private void addLabelAndField(
                 JPanel panel, String labelKey, JComponent field, GridBagConstraints gbc, int row) {
@@ -693,7 +770,21 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
                 Preferences.setPreference(
                         PROPERTY_API_TEMPERATURE,
                         panel.temperatureField.getText().trim());
-                Preferences.setPreference(PROPERTY_API_MODEL, (String) panel.modelComboBox.getSelectedItem());
+                // 保存模型设置
+                boolean useCustomModel = panel.useCustomModelCheckBox.isSelected();
+                Preferences.setPreference(PROPERTY_USE_CUSTOM_MODEL, String.valueOf(useCustomModel));
+                
+                if (useCustomModel) {
+                    // 保存自定义模型名称
+                    String customModel = panel.customModelField.getText().trim();
+                    Preferences.setPreference(PROPERTY_API_CUSTOM_MODEL, customModel);
+                    // 将 PROPERTY_API_MODEL 设置为 "custom" 以保持兼容性
+                    Preferences.setPreference(PROPERTY_API_MODEL, "custom");
+                } else {
+                    // 保存选中的预设模型
+                    String selectedModel = (String) panel.modelComboBox.getSelectedItem();
+                    Preferences.setPreference(PROPERTY_API_MODEL, selectedModel);
+                }
                 Preferences.setPreference(PROPERTY_API_PROVIDER, (String) panel.apiComboBox.getSelectedItem());
                 Preferences.setPreference(PROPERTY_API_CACHE, panel.cacheCheckBox.isSelected());
                 Preferences.setPreference(PROPERTY_API_GLOSSARY, panel.glossaryCheckBox.isSelected());
@@ -706,8 +797,23 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
         panel.urlField.setText(Preferences.getPreference(PROPERTY_API_URL));
         panel.promptField.setText(Preferences.getPreference(PROPERTY_API_PROMPT));
         panel.temperatureField.setText(Preferences.getPreference(PROPERTY_API_TEMPERATURE));
+        // 设置模型下拉框
         panel.modelComboBox.setModel(new DefaultComboBoxModel<>(getAllModels()));
-        panel.modelComboBox.setSelectedItem(Preferences.getPreference(PROPERTY_API_MODEL));
+        
+        String savedModel = Preferences.getPreference(PROPERTY_API_MODEL);
+        boolean useCustomModel = Boolean.parseBoolean(Preferences.getPreference(PROPERTY_USE_CUSTOM_MODEL));
+        
+        if (useCustomModel) {
+            // 使用自定义模型
+            String customModel = Preferences.getPreference(PROPERTY_API_CUSTOM_MODEL);
+            panel.customModelField.setText(customModel != null ? customModel : "");
+            panel.useCustomModelCheckBox.setSelected(true);
+            panel.handleCustomModelToggle(true);
+        } else {
+            // 使用预设模型
+            panel.modelComboBox.setSelectedItem(savedModel);
+            panel.useCustomModelCheckBox.setSelected(false);
+        }
         panel.apiComboBox.setModel(new DefaultComboBoxModel<>(Providers));
         panel.apiComboBox.setSelectedItem(Preferences.getPreference(PROPERTY_API_PROVIDER));
         panel.cacheCheckBox.setSelected(Boolean.parseBoolean(Preferences.getPreference(PROPERTY_API_CACHE)));
@@ -723,6 +829,7 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
         System.arraycopy(claudeModels, 0, combinedModels, openaiModels.length, claudeModels.length);
         return combinedModels;
     }
+    
 
     private String truncateOrPad(String text, int length) {
         if (text == null) {
