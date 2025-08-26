@@ -37,7 +37,7 @@ if (dotgit.exists()) {
 omegat {
     version = "6.0.0"
     pluginClass = "xyz.inertia.machinetranslators.openaitrans.OpenaiTranslate"
-    packIntoJarFileFilter = {it.exclude("META-INF/**/*", "module-info.class", "kotlin/**/*")}
+    packIntoJarFileFilter = {it.exclude("META-INF/**/*", "module-info.class")}
 }
 
 java {
@@ -51,7 +51,6 @@ dependencies {
     implementation("org.netbeans.api:org-openide-awt:RELEASE130") 
     implementation("commons-io:commons-io:2.7")
     implementation("commons-lang:commons-lang:2.6")
-    packIntoJar("com.squareup.okhttp3:okhttp:4.12.0")
     packIntoJar("com.fasterxml.jackson.core:jackson-core:2.15.2")
     packIntoJar("com.fasterxml.jackson.core:jackson-databind:2.15.2")
     testImplementation("junit:junit:4.13")
