@@ -16,7 +16,7 @@
 4. （可选）在 `Prompt` 框内填入自定义的 prompt，如无需要可以不填。如果选择自定义，则不会自动识别语言，需要自行在 prompt 中指定目标语言，若留空则会使用默认 prompt，并自动设置目标语言。
 5. （可选）修改 `temperature`，默认设置为 0。
 6. （可选）修改 `API format`，有些服务提供商会使用 OpenAI 的 API 格式为 Claude 模型提供服务，如果不理解这个选项的含义，请不要修改默认设置，此时会自动根据选择的模型决定 API 格式，默认设置为 default。
-7. 选择需要调用的模型。
+7. 从下拉列表中选择需要调用的模型，或勾选 `使用自定义模型` 复选框来手动输入自定义模型名称。这允许您使用下拉列表中未列出的模型。
 8. （可选）启用术语表功能，启用后会将术语表窗口中显示的与该段待翻译文本匹配的术语表一并发送给 API。
 9. （可选）启用缓存功能，启用后会优先搜索之前翻译结果的缓存。缓存在关闭项目后清空。
 10. 最后勾选启用，点确定并关闭首选项窗口。
@@ -26,6 +26,12 @@
 
 | 模型名称              | 模型提供商  |
 |-------------------|--------|
+| gpt-5             | OpenAI |
+| gpt-5-mini        | OpenAI |
+| gpt-5-nano        | OpenAI |
+| gpt-4.1           | OpenAI |
+| gpt-4.1-mini      | OpenAI |
+| gpt-4.1-nano      | OpenAI |
 | gpt-4o            | OpenAI |
 | gpt-4o-2024-11-20 | OpenAI |
 | gpt-4o-2024-08-06 | OpenAI |
@@ -35,15 +41,29 @@
 | gpt-4-turbo       | OpenAI |
 | gpt-3.5-turbo     | OpenAI |
 | gpt-3.5           | OpenAI |
-| claude-3-opus-20240229     | Claude   |
-| claude-3-5-sonnet-20240620 | Claude   |
+| claude-opus-4-1-20250805   | Claude   |
+| claude-opus-4-20250514     | Claude   |
+| claude-sonnet-4-20250514   | Claude   |
+| claude-3-7-sonnet-20250219 | Claude   |
 | claude-3-5-sonnet-20241022 | Claude   |
+| claude-3-5-sonnet-20240620 | Claude   |
+| claude-3-opus-20240229     | Claude   |
 | claude-3-sonnet-20240229   | Claude   |
 | claude-3-5-haiku-20241022  | Claude   |
 | claude-3-haiku-20240307    | Claude   |
 |  deepseek-chat             | DeepSeek |
 
 其中部分模型可能未经测试，如果问题请通过 issue 反馈。如有需要添加的模型，也请通过 issue 反馈。
+
+## 自定义模型支持
+如果您需要使用下拉列表中没有的模型，可以使用 `使用自定义模型` 功能：
+1. 在配置对话框底部勾选 `使用自定义模型` 复选框
+2. 勾选后，模型下拉列表将被替换为文本输入框
+3. 输入 API 提供商要求的确切模型名称
+4. 此功能适用于：
+   - 尚未添加到列表中的新发布模型
+   - 自定义微调模型
+   - 来自使用兼容格式的其他 API 提供商的模型
 
 ## 关于 prompt 的说明
 ### 翻译部分 prompt

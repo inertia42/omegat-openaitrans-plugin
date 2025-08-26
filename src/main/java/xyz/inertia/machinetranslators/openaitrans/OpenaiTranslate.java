@@ -70,6 +70,12 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
     private static final ResourceBundle BUNDLE = ResourceBundle.getBundle("OpenaiTranslateBundle");
 
     protected static final String[] openaiModels = {
+        "gpt-5",
+        "gpt-5-mini",
+        "gpt-5-nano",
+        "gpt-4.1",
+        "gpt-4.1-mini",
+        "gpt-4.1-nano",
         "gpt-4o",
         "gpt-4o-2024-11-20",
         "gpt-4o-2024-08-06",
@@ -82,9 +88,13 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
         "deepseek-chat"
     };
     protected static final String[] claudeModels = {
-        "claude-3-opus-20240229",
-        "claude-3-5-sonnet-20240620",
+        "claude-opus-4-1-20250805",
+        "claude-opus-4-20250514",
+        "claude-sonnet-4-20250514",
+        "claude-3-7-sonnet-20250219",
         "claude-3-5-sonnet-20241022",
+        "claude-3-5-sonnet-20240620",
+        "claude-3-opus-20240229",
         "claude-3-sonnet-20240229",
         "claude-3-5-haiku-20241022",
         "claude-3-haiku-20240307"
