@@ -99,7 +99,7 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
         "claude-3-5-haiku-20241022",
         "claude-3-haiku-20240307"
     };
-    protected static final String[] Providers = {"default", "OpenAI", "Claude", "DeepSeek"};
+    protected static final String[] Providers = {"default", "OpenAI", "Claude", "DeepSeek", "VolcEngine"};
 
     protected static final Logger LOGGER = LoggerFactory.getLogger(OpenaiTranslate.class);
 
@@ -265,6 +265,8 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
             url += "/v1/chat/completions";
         } else if ("Claude".equals(provider)) {
             url += "/v1/messages";
+        } else if ("VolcEngine".equals(provider)) {
+            url += "/api/v3/chat/completions";
         }
 
         //     -----------------转换语言代码-----------------
@@ -307,7 +309,7 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
 
         try {
             HttpResponse<String> response;
-            if ("OpenAI".equals(provider)) {
+            if ("OpenAI".equals(provider) || "VolcEngine".equals(provider)) {
                 // 构建消息列表
                 Map<String, String> systemMessage = new HashMap<>();
                 systemMessage.put("role", "system");
@@ -673,7 +675,7 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
         }
         
         private void updateApiComboBoxForCustom() {
-            String[] providersWithoutDefault = {"OpenAI", "Claude", "DeepSeek"};
+            String[] providersWithoutDefault = {"OpenAI", "Claude", "DeepSeek", "VolcEngine"};
             String currentSelection = (String) apiComboBox.getSelectedItem();
             apiComboBox.setModel(new DefaultComboBoxModel<>(providersWithoutDefault));
             
