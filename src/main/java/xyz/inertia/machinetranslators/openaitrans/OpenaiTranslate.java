@@ -31,6 +31,7 @@ import java.awt.*;
 import java.awt.Color;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -67,6 +68,24 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
     protected static final String PROPERTY_API_TEMPERATURE = "openai.api.temperature";
     protected static final String PROPERTY_API_CACHE = "openai.api.enable.cache";
     protected static final String PROPERTY_API_GLOSSARY = "openai.api.enable.glossary";
+    
+    // 多配置管理字段
+    protected static final String PROPERTY_CONFIG_LIST = "openai.config.list";
+    protected static final String PROPERTY_CONFIG_NAME_TEMPLATE = "openai.%s.config.name";
+    protected static final String PROPERTY_CONFIG_ENABLED_TEMPLATE = "openai.%s.config.enabled";
+    protected static final String PROPERTY_CONFIG_CREATED_TEMPLATE = "openai.%s.config.created";
+    
+    // API配置字段模板（用于多配置）
+    protected static final String PROPERTY_API_KEY_TEMPLATE = "openai.%s.api.key";
+    protected static final String PROPERTY_API_URL_TEMPLATE = "openai.%s.api.url";
+    protected static final String PROPERTY_API_MODEL_TEMPLATE = "openai.%s.api.model";
+    protected static final String PROPERTY_API_CUSTOM_MODEL_TEMPLATE = "openai.%s.api.custom.model";
+    protected static final String PROPERTY_USE_CUSTOM_MODEL_TEMPLATE = "openai.%s.api.use.custom.model";
+    protected static final String PROPERTY_API_PROVIDER_TEMPLATE = "openai.%s.api.format";
+    protected static final String PROPERTY_API_PROMPT_TEMPLATE = "openai.%s.api.prompt";
+    protected static final String PROPERTY_API_TEMPERATURE_TEMPLATE = "openai.%s.api.temperature";
+    protected static final String PROPERTY_API_CACHE_TEMPLATE = "openai.%s.api.enable.cache";
+    protected static final String PROPERTY_API_GLOSSARY_TEMPLATE = "openai.%s.api.enable.glossary";
     private static final ResourceBundle BUNDLE = ResourceBundle.getBundle("OpenaiTranslateBundle");
 
     protected static final String[] openaiModels = {
@@ -110,6 +129,277 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
 
     static String getString(String key) {
         return BUNDLE.getString(key);
+    }
+    
+    /**
+     * 生成配置ID
+     */
+    private static String generateConfigId() {
+        String chars = "abcdefghijklmnopqrstuvwxyz";
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < 6; i++) {
+            sb.append(chars.charAt((int) (Math.random() * chars.length())));
+        }
+        return sb.toString();
+    }
+    
+    /**
+     * 获取配置列表
+     */
+    private static List<String> getConfigList() {
+        String listStr = Preferences.getPreference(PROPERTY_CONFIG_LIST);
+        if (listStr == null || listStr.trim().isEmpty()) {
+            return new ArrayList<>();
+        }
+        return Arrays.asList(listStr.split(","));
+    }
+    
+    /**
+     * 保存配置列表
+     */
+    private static void saveConfigList(List<String> configIds) {
+        String listStr = String.join(",", configIds);
+        Preferences.setPreference(PROPERTY_CONFIG_LIST, listStr);
+    }
+    
+    /**
+     * 从Preferences加载单个配置数据
+     */
+    private ConfigTabData loadConfigData(String configId) {
+        ConfigTabData data;
+        
+        if ("api".equals(configId)) {
+            // 第一个配置使用原有的key结构
+            // 尝试从配置中读取名称，如果没有则使用默认值
+            String configName = Preferences.getPreference(String.format(PROPERTY_CONFIG_NAME_TEMPLATE, "api"));
+            if (configName == null || configName.trim().isEmpty()) {
+                configName = "默认配置";
+            }
+            data = new ConfigTabData("api", configName);
+            data.apiKey = getCredential(PROPERTY_API_KEY);
+            data.apiUrl = Preferences.getPreference(PROPERTY_API_URL);
+            data.prompt = Preferences.getPreference(PROPERTY_API_PROMPT);
+            data.temperature = Preferences.getPreference(PROPERTY_API_TEMPERATURE);
+            
+            String savedModel = Preferences.getPreference(PROPERTY_API_MODEL);
+            boolean useCustomModel = Boolean.parseBoolean(Preferences.getPreference(PROPERTY_USE_CUSTOM_MODEL));
+            
+            data.useCustomModel = useCustomModel;
+            if (useCustomModel) {
+                data.customModel = Preferences.getPreference(PROPERTY_API_CUSTOM_MODEL);
+            } else {
+                data.model = savedModel != null ? savedModel : "gpt-4o";
+            }
+            
+            data.apiProvider = Preferences.getPreference(PROPERTY_API_PROVIDER);
+            if (data.apiProvider == null) {
+                data.apiProvider = "OpenAI";
+            }
+            
+            data.enableCache = Boolean.parseBoolean(Preferences.getPreference(PROPERTY_API_CACHE));
+            data.enableGlossary = Boolean.parseBoolean(Preferences.getPreference(PROPERTY_API_GLOSSARY));
+            data.temporaryCredential = false;
+            
+            // 加载默认配置的新字段
+            String enabledStr = Preferences.getPreference(String.format(PROPERTY_CONFIG_ENABLED_TEMPLATE, "api"));
+            data.enabled = enabledStr == null || enabledStr.trim().isEmpty() ? true : Boolean.parseBoolean(enabledStr);
+            
+            data.createdTime = Preferences.getPreference(String.format(PROPERTY_CONFIG_CREATED_TEMPLATE, "api"));
+            if (data.createdTime == null || data.createdTime.trim().isEmpty()) {
+                data.createdTime = String.valueOf(System.currentTimeMillis());
+            }
+            
+        } else {
+            // 其他配置使用模板key结构
+            String configName = Preferences.getPreference(String.format(PROPERTY_CONFIG_NAME_TEMPLATE, configId));
+            if (configName == null || configName.trim().isEmpty()) {
+                configName = "配置 " + configId;
+            }
+            
+            data = new ConfigTabData(configId, configName);
+            data.enabled = Boolean.parseBoolean(Preferences.getPreference(String.format(PROPERTY_CONFIG_ENABLED_TEMPLATE, configId)));
+            data.createdTime = Preferences.getPreference(String.format(PROPERTY_CONFIG_CREATED_TEMPLATE, configId));
+            
+            data.apiKey = getCredential(String.format(PROPERTY_API_KEY_TEMPLATE, configId));
+            data.apiUrl = Preferences.getPreference(String.format(PROPERTY_API_URL_TEMPLATE, configId));
+            data.prompt = Preferences.getPreference(String.format(PROPERTY_API_PROMPT_TEMPLATE, configId));
+            data.temperature = Preferences.getPreference(String.format(PROPERTY_API_TEMPERATURE_TEMPLATE, configId));
+            
+            String savedModel = Preferences.getPreference(String.format(PROPERTY_API_MODEL_TEMPLATE, configId));
+            boolean useCustomModel = Boolean.parseBoolean(Preferences.getPreference(String.format(PROPERTY_USE_CUSTOM_MODEL_TEMPLATE, configId)));
+            
+            data.useCustomModel = useCustomModel;
+            if (useCustomModel) {
+                data.customModel = Preferences.getPreference(String.format(PROPERTY_API_CUSTOM_MODEL_TEMPLATE, configId));
+            } else {
+                data.model = savedModel != null ? savedModel : "gpt-4o";
+            }
+            
+            data.apiProvider = Preferences.getPreference(String.format(PROPERTY_API_PROVIDER_TEMPLATE, configId));
+            if (data.apiProvider == null) {
+                data.apiProvider = "OpenAI";
+            }
+            
+            data.enableCache = Boolean.parseBoolean(Preferences.getPreference(String.format(PROPERTY_API_CACHE_TEMPLATE, configId)));
+            data.enableGlossary = Boolean.parseBoolean(Preferences.getPreference(String.format(PROPERTY_API_GLOSSARY_TEMPLATE, configId)));
+            data.temporaryCredential = false;
+        }
+        
+        return data;
+    }
+    
+    /**
+     * 加载所有配置数据
+     */
+    private List<ConfigTabData> loadAllConfigs() {
+        List<ConfigTabData> configs = new ArrayList<>();
+        
+        // 首先加载默认配置（api）
+        ConfigTabData defaultConfig = loadConfigData("api");
+        configs.add(defaultConfig);
+        
+        // 然后加载其他配置
+        List<String> configIds = getConfigList();
+        for (String configId : configIds) {
+            if (!"api".equals(configId)) { // 避免重复加载默认配置
+                ConfigTabData config = loadConfigData(configId);
+                configs.add(config);
+            }
+        }
+        
+        return configs;
+    }
+    
+    /**
+     * 保存所有配置数据
+     */
+    private void saveAllConfigurations(List<ConfigTabData> allConfigs) {
+        // 收集所有配置ID（除了api）
+        List<String> configIds = new ArrayList<>();
+        
+        // 保存每个配置
+        for (ConfigTabData config : allConfigs) {
+            saveConfigData(config);
+            
+            // 收集非默认配置的ID
+            if (!"api".equals(config.configId)) {
+                configIds.add(config.configId);
+            }
+        }
+        
+        // 更新配置列表
+        saveConfigList(configIds);
+        
+        // 清理已删除的配置
+        cleanupDeletedConfigs(allConfigs);
+    }
+    
+    /**
+     * 清理已删除的配置
+     */
+    private void cleanupDeletedConfigs(List<ConfigTabData> currentConfigs) {
+        // 获取当前存储的配置列表
+        List<String> storedConfigIds = getConfigList();
+        
+        // 获取当前配置的ID列表
+        List<String> currentConfigIds = new ArrayList<>();
+        for (ConfigTabData config : currentConfigs) {
+            if (!"api".equals(config.configId)) {
+                currentConfigIds.add(config.configId);
+            }
+        }
+        
+        // 找到需要删除的配置ID
+        for (String storedId : storedConfigIds) {
+            if (!currentConfigIds.contains(storedId)) {
+                // 删除这个配置的所有相关设置
+                deleteConfig(storedId);
+            }
+        }
+    }
+    
+    /**
+     * 删除指定配置的所有设置
+     */
+    private void deleteConfig(String configId) {
+        // 注意：不删除 "api" 配置，因为那是默认配置
+        if ("api".equals(configId)) {
+            return;
+        }
+        
+        // 删除所有相关的配置项
+        Preferences.setPreference(String.format(PROPERTY_CONFIG_NAME_TEMPLATE, configId), "");
+        Preferences.setPreference(String.format(PROPERTY_CONFIG_ENABLED_TEMPLATE, configId), "");
+        Preferences.setPreference(String.format(PROPERTY_CONFIG_CREATED_TEMPLATE, configId), "");
+        
+        // 删除API相关配置
+        Preferences.setPreference(String.format(PROPERTY_API_URL_TEMPLATE, configId), "");
+        Preferences.setPreference(String.format(PROPERTY_API_MODEL_TEMPLATE, configId), "");
+        Preferences.setPreference(String.format(PROPERTY_API_CUSTOM_MODEL_TEMPLATE, configId), "");
+        Preferences.setPreference(String.format(PROPERTY_USE_CUSTOM_MODEL_TEMPLATE, configId), "");
+        Preferences.setPreference(String.format(PROPERTY_API_PROVIDER_TEMPLATE, configId), "");
+        Preferences.setPreference(String.format(PROPERTY_API_PROMPT_TEMPLATE, configId), "");
+        Preferences.setPreference(String.format(PROPERTY_API_TEMPERATURE_TEMPLATE, configId), "");
+        Preferences.setPreference(String.format(PROPERTY_API_CACHE_TEMPLATE, configId), "");
+        Preferences.setPreference(String.format(PROPERTY_API_GLOSSARY_TEMPLATE, configId), "");
+        
+        // 删除凭证
+        setCredential(String.format(PROPERTY_API_KEY_TEMPLATE, configId), "", false);
+    }
+    
+    /**
+     * 保存单个配置数据到Preferences
+     */
+    private void saveConfigData(ConfigTabData data) {
+        if ("api".equals(data.configId)) {
+            // 第一个配置使用原有的key结构
+            // 保存配置名称（新增）
+            Preferences.setPreference(String.format(PROPERTY_CONFIG_NAME_TEMPLATE, "api"), data.name);
+            Preferences.setPreference(String.format(PROPERTY_CONFIG_ENABLED_TEMPLATE, "api"), String.valueOf(data.enabled));
+            Preferences.setPreference(String.format(PROPERTY_CONFIG_CREATED_TEMPLATE, "api"), data.createdTime);
+            
+            boolean temporary = data.temporaryCredential;
+            setCredential(PROPERTY_API_KEY, data.apiKey, temporary);
+            Preferences.setPreference(PROPERTY_API_URL, data.apiUrl);
+            Preferences.setPreference(PROPERTY_API_PROMPT, data.prompt);
+            Preferences.setPreference(PROPERTY_API_TEMPERATURE, data.temperature);
+            
+            Preferences.setPreference(PROPERTY_USE_CUSTOM_MODEL, String.valueOf(data.useCustomModel));
+            if (data.useCustomModel) {
+                Preferences.setPreference(PROPERTY_API_CUSTOM_MODEL, data.customModel);
+                Preferences.setPreference(PROPERTY_API_MODEL, "custom");
+            } else {
+                Preferences.setPreference(PROPERTY_API_MODEL, data.model);
+            }
+            
+            Preferences.setPreference(PROPERTY_API_PROVIDER, data.apiProvider);
+            Preferences.setPreference(PROPERTY_API_CACHE, String.valueOf(data.enableCache));
+            Preferences.setPreference(PROPERTY_API_GLOSSARY, String.valueOf(data.enableGlossary));
+            
+        } else {
+            // 其他配置使用模板key结构
+            Preferences.setPreference(String.format(PROPERTY_CONFIG_NAME_TEMPLATE, data.configId), data.name);
+            Preferences.setPreference(String.format(PROPERTY_CONFIG_ENABLED_TEMPLATE, data.configId), String.valueOf(data.enabled));
+            Preferences.setPreference(String.format(PROPERTY_CONFIG_CREATED_TEMPLATE, data.configId), data.createdTime);
+            
+            boolean temporary = data.temporaryCredential;
+            setCredential(String.format(PROPERTY_API_KEY_TEMPLATE, data.configId), data.apiKey, temporary);
+            Preferences.setPreference(String.format(PROPERTY_API_URL_TEMPLATE, data.configId), data.apiUrl);
+            Preferences.setPreference(String.format(PROPERTY_API_PROMPT_TEMPLATE, data.configId), data.prompt);
+            Preferences.setPreference(String.format(PROPERTY_API_TEMPERATURE_TEMPLATE, data.configId), data.temperature);
+            
+            Preferences.setPreference(String.format(PROPERTY_USE_CUSTOM_MODEL_TEMPLATE, data.configId), String.valueOf(data.useCustomModel));
+            if (data.useCustomModel) {
+                Preferences.setPreference(String.format(PROPERTY_API_CUSTOM_MODEL_TEMPLATE, data.configId), data.customModel);
+                Preferences.setPreference(String.format(PROPERTY_API_MODEL_TEMPLATE, data.configId), "custom");
+            } else {
+                Preferences.setPreference(String.format(PROPERTY_API_MODEL_TEMPLATE, data.configId), data.model);
+            }
+            
+            Preferences.setPreference(String.format(PROPERTY_API_PROVIDER_TEMPLATE, data.configId), data.apiProvider);
+            Preferences.setPreference(String.format(PROPERTY_API_CACHE_TEMPLATE, data.configId), String.valueOf(data.enableCache));
+            Preferences.setPreference(String.format(PROPERTY_API_GLOSSARY_TEMPLATE, data.configId), String.valueOf(data.enableGlossary));
+        }
     }
 
     /**
@@ -467,48 +757,474 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
         return true;
     }
 
-    @SuppressWarnings("serial")
-    public class OpenAIConfigPanel extends JPanel {
-        private javax.swing.JPanel descriptionPanel;
-        private javax.swing.JTextArea descriptionTextArea;
-        private javax.swing.JPanel itemsPanel;
-        private javax.swing.JPanel credentialsPanel;
-        public javax.swing.JTextArea apiKeyField;
-        public javax.swing.JTextArea promptField;
-        public javax.swing.JTextField urlField;
-        public javax.swing.JTextField temperatureField;
-        public javax.swing.JComboBox<String> modelComboBox;
-        public javax.swing.JComboBox<String> apiComboBox;
-        public javax.swing.JTextField customModelField;
-        public javax.swing.JCheckBox useCustomModelCheckBox;
-        private boolean isUpdatingModelComboBox = false;
-        public javax.swing.JCheckBox temporaryCheckBox;
-        public javax.swing.JCheckBox cacheCheckBox;
-        public javax.swing.JCheckBox glossaryCheckBox;
-        public javax.swing.JButton okButton;
-        public javax.swing.JButton cancelButton;
+    // 配置数据模型
+    public static class ConfigTabData {
+        public String configId;           // 配置唯一标识符
+        public String name;               // 配置显示名称
+        public boolean enabled;           // 是否启用此配置
+        public String createdTime;        // 创建时间
+        public String apiKey;
+        public String apiUrl;
+        public String prompt;
+        public String temperature;
+        public String model;
+        public String customModel;
+        public boolean useCustomModel;
+        public String apiProvider;
+        public boolean enableCache;
+        public boolean enableGlossary;
+        public boolean temporaryCredential;
+        
+        public ConfigTabData(String name) {
+            this.configId = generateConfigId();
+            this.name = name;
+            this.enabled = true;
+            this.createdTime = String.valueOf(System.currentTimeMillis());
+            // 设置默认值
+            this.apiKey = "";
+            this.apiUrl = "";
+            this.prompt = "";
+            this.temperature = "0";
+            this.model = "gpt-4o";
+            this.customModel = "";
+            this.useCustomModel = false;
+            this.apiProvider = "OpenAI";
+            this.enableCache = true;
+            this.enableGlossary = true;
+            this.temporaryCredential = false;
+        }
+        
+        public ConfigTabData(String configId, String name) {
+            this.configId = configId;
+            this.name = name;
+            this.enabled = true;
+            this.createdTime = String.valueOf(System.currentTimeMillis());
+            // 设置默认值
+            this.apiKey = "";
+            this.apiUrl = "";
+            this.prompt = "";
+            this.temperature = "0";
+            this.model = "gpt-4o";
+            this.customModel = "";
+            this.useCustomModel = false;
+            this.apiProvider = "OpenAI";
+            this.enableCache = true;
+            this.enableGlossary = true;
+            this.temporaryCredential = false;
+        }
+        
+        public ConfigTabData copy() {
+            ConfigTabData copy = new ConfigTabData(this.name);
+            copy.configId = generateConfigId(); // 生成新的ID
+            copy.enabled = this.enabled;
+            copy.createdTime = String.valueOf(System.currentTimeMillis());
+            copy.apiKey = this.apiKey;
+            copy.apiUrl = this.apiUrl;
+            copy.prompt = this.prompt;
+            copy.temperature = this.temperature;
+            copy.model = this.model;
+            copy.customModel = this.customModel;
+            copy.useCustomModel = this.useCustomModel;
+            copy.apiProvider = this.apiProvider;
+            copy.enableCache = this.enableCache;
+            copy.enableGlossary = this.enableGlossary;
+            copy.temporaryCredential = this.temporaryCredential;
+            return copy;
+        }
+    }
 
-        public OpenAIConfigPanel() {
+    // 动态标签页组件
+    @SuppressWarnings("serial")
+    public class DynamicTabbedPane extends JPanel {
+        private JPanel tabBar;
+        private JPanel contentArea;
+        private CardLayout cardLayout;
+        private List<ConfigTabInfo> tabs;
+        private int selectedIndex = -1;
+        private int tabCounter = 1;
+        
+        private class ConfigTabInfo {
+            String id;
+            String title;
+            ConfigTabPanel panel;
+            JButton tabButton;
+            JButton closeButton;
+            ConfigTabData data;
+        }
+        
+        public DynamicTabbedPane() {
+            tabs = new ArrayList<>();
             initComponents();
         }
-
+        
+        public DynamicTabbedPane(ConfigTabData initialData) {
+            tabs = new ArrayList<>();
+            initComponents(initialData);
+        }
+        
+        public DynamicTabbedPane(List<ConfigTabData> allConfigs) {
+            tabs = new ArrayList<>();
+            initComponents(allConfigs);
+        }
+        
         private void initComponents() {
-            setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+            initComponents((ConfigTabData) null);
+        }
+        
+        private void initComponents(ConfigTabData initialData) {
             setLayout(new BorderLayout());
+            
+            // 创建标签页栏
+            tabBar = new JPanel();
+            tabBar.setLayout(new BoxLayout(tabBar, BoxLayout.X_AXIS));
+            tabBar.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(0, 0, 1, 0, Color.GRAY),
+                BorderFactory.createEmptyBorder(5, 5, 5, 5)
+            ));
+            
+            // 创建内容区域
+            cardLayout = new CardLayout();
+            contentArea = new JPanel(cardLayout);
+            
+            // 添加按钮
+            JButton addButton = new JButton("+");
+            addButton.setToolTipText("添加新的配置标签页");
+            addButton.setPreferredSize(new Dimension(30, 25));
+            addButton.setMaximumSize(new Dimension(30, 25));
+            addButton.addActionListener(e -> addNewTab());
+            
+            tabBar.add(Box.createHorizontalStrut(5));
+            tabBar.add(addButton);
+            tabBar.add(Box.createHorizontalGlue());
+            
+            add(tabBar, BorderLayout.NORTH);
+            add(contentArea, BorderLayout.CENTER);
+            
+            // 添加默认标签页，如果有初始数据则使用初始数据
+            if (initialData != null) {
+                addDefaultTabWithData(initialData);
+            } else {
+                addDefaultTab();
+            }
+        }
+        
+        private void initComponents(List<ConfigTabData> allConfigs) {
+            setLayout(new BorderLayout());
+            
+            // 创建标签页栏
+            tabBar = new JPanel();
+            tabBar.setLayout(new BoxLayout(tabBar, BoxLayout.X_AXIS));
+            tabBar.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(0, 0, 1, 0, Color.GRAY),
+                BorderFactory.createEmptyBorder(5, 5, 5, 5)
+            ));
+            
+            // 创建内容区域
+            cardLayout = new CardLayout();
+            contentArea = new JPanel(cardLayout);
+            
+            // 添加按钮
+            JButton addButton = new JButton("+");
+            addButton.setToolTipText("添加新的配置标签页");
+            addButton.setPreferredSize(new Dimension(30, 25));
+            addButton.setMaximumSize(new Dimension(30, 25));
+            addButton.addActionListener(e -> addNewTab());
+            
+            tabBar.add(Box.createHorizontalStrut(5));
+            tabBar.add(addButton);
+            tabBar.add(Box.createHorizontalGlue());
+            
+            add(tabBar, BorderLayout.NORTH);
+            add(contentArea, BorderLayout.CENTER);
+            
+            // 添加所有配置标签页
+            if (allConfigs != null && !allConfigs.isEmpty()) {
+                for (int i = 0; i < allConfigs.size(); i++) {
+                    ConfigTabData config = allConfigs.get(i);
+                    addTab(config, false); // 不自动选择标签页
+                }
+                // 最后选择第一个标签页
+                selectTab(0);
+            } else {
+                addDefaultTab();
+            }
+        }
+        
+        private void addDefaultTab() {
+            ConfigTabData defaultData = new ConfigTabData("默认配置");
+            addTab(defaultData);
+        }
+        
+        // 添加新方法：使用预设数据创建默认标签页
+        private void addDefaultTabWithData(ConfigTabData data) {
+            addTab(data);
+        }
+        
+        private void addNewTab() {
+            String newTabName = "配置 " + tabCounter++;
+            ConfigTabData newData = new ConfigTabData(newTabName);
+            
+            // 如果有选中的标签页，复制其配置作为模板
+            if (selectedIndex >= 0 && selectedIndex < tabs.size()) {
+                ConfigTabData currentData = tabs.get(selectedIndex).data;
+                newData = currentData.copy();
+                newData.name = newTabName;
+            }
+            
+            addTab(newData);
+        }
+        
+        public void addTab(ConfigTabData data) {
+            addTab(data, true);
+        }
+        
+        public void addTab(ConfigTabData data, boolean autoSelect) {
+            ConfigTabInfo tabInfo = new ConfigTabInfo();
+            tabInfo.id = "tab_" + System.currentTimeMillis();
+            tabInfo.title = data.name;
+            tabInfo.data = data;
+            tabInfo.panel = new ConfigTabPanel(data);
+            
+            // 创建标签页按钮
+            tabInfo.tabButton = new JButton(data.name);
+            tabInfo.tabButton.setPreferredSize(new Dimension(100, 25));
+            tabInfo.tabButton.setMaximumSize(new Dimension(150, 25));
+            tabInfo.tabButton.addActionListener(e -> selectTab(tabs.indexOf(tabInfo)));
+            
+            // 创建关闭按钮
+            tabInfo.closeButton = new JButton("×");
+            tabInfo.closeButton.setPreferredSize(new Dimension(20, 25));
+            tabInfo.closeButton.setMaximumSize(new Dimension(20, 25));
+            tabInfo.closeButton.setMargin(new Insets(0, 0, 0, 0));
+            tabInfo.closeButton.setBorderPainted(false);
+            tabInfo.closeButton.setContentAreaFilled(false);
+            tabInfo.closeButton.setFocusable(false);
+            tabInfo.closeButton.setToolTipText("关闭标签页");
+            tabInfo.closeButton.addActionListener(e -> removeTab(tabs.indexOf(tabInfo)));
+            
+            // 创建标签页面板
+            JPanel tabPanel = new JPanel();
+            tabPanel.setLayout(new BoxLayout(tabPanel, BoxLayout.X_AXIS));
+            tabPanel.add(tabInfo.tabButton);
+            
+            // 只有多于一个标签页时才显示关闭按钮
+            if (tabs.size() > 0) {
+                tabPanel.add(tabInfo.closeButton);
+                // 为现有标签页添加关闭按钮
+                updateCloseButtonsVisibility();
+            }
+            
+            // 添加到标签页栏（在加号按钮前）
+            tabBar.add(tabPanel, tabBar.getComponentCount() - 2);
+            
+            // 添加到内容区域
+            contentArea.add(tabInfo.panel, tabInfo.id);
+            
+            tabs.add(tabInfo);
+            
+            if (autoSelect) {
+                selectTab(tabs.size() - 1);
+            }
+            
+            revalidate();
+            repaint();
+        }
+        
+        private void updateCloseButtonsVisibility() {
+            boolean showCloseButtons = tabs.size() > 1;
+            for (ConfigTabInfo tabInfo : tabs) {
+                tabInfo.closeButton.setVisible(showCloseButtons);
+            }
+        }
+        
+        private void selectTab(int index) {
+            if (index >= 0 && index < tabs.size() && index != selectedIndex) {
+                selectedIndex = index;
+                ConfigTabInfo selectedTab = tabs.get(index);
+                cardLayout.show(contentArea, selectedTab.id);
+                
+                // 更新标签页按钮状态
+                for (int i = 0; i < tabs.size(); i++) {
+                    ConfigTabInfo tab = tabs.get(i);
+                    if (i == index) {
+                        tab.tabButton.setBackground(Color.LIGHT_GRAY);
+                        tab.tabButton.setOpaque(true);
+                    } else {
+                        tab.tabButton.setBackground(null);
+                        tab.tabButton.setOpaque(false);
+                    }
+                }
+            }
+        }
+        
+        private void removeTab(int index) {
+            if (index >= 0 && index < tabs.size() && tabs.size() > 1) {
+                ConfigTabInfo tabInfo = tabs.get(index);
+                
+                // 从UI中移除标签页面板
+                for (Component comp : tabBar.getComponents()) {
+                    if (comp instanceof JPanel) {
+                        JPanel panel = (JPanel) comp;
+                        if (panel.getComponentCount() > 0 && 
+                            panel.getComponent(0) == tabInfo.tabButton) {
+                            tabBar.remove(panel);
+                            break;
+                        }
+                    }
+                }
+                
+                contentArea.remove(tabInfo.panel);
+                tabs.remove(index);
+                
+                // 更新关闭按钮可见性
+                updateCloseButtonsVisibility();
+                
+                // 选择相邻标签页
+                if (selectedIndex >= tabs.size()) {
+                    selectTab(tabs.size() - 1);
+                } else if (selectedIndex == index) {
+                    selectTab(Math.max(0, index - 1));
+                } else if (selectedIndex > index) {
+                    selectedIndex--;
+                }
+                
+                revalidate();
+                repaint();
+            }
+        }
+        
+        public List<ConfigTabData> getAllConfigData() {
+            List<ConfigTabData> allData = new ArrayList<>();
+            for (ConfigTabInfo tab : tabs) {
+                // 从UI组件更新数据
+                tab.panel.updateConfigData();
+                allData.add(tab.data);
+            }
+            return allData;
+        }
+        
+        public ConfigTabData getCurrentConfigData() {
+            if (selectedIndex >= 0 && selectedIndex < tabs.size()) {
+                ConfigTabInfo selectedTab = tabs.get(selectedIndex);
+                selectedTab.panel.updateConfigData();
+                return selectedTab.data;
+            }
+            return null;
+        }
+        
+        public int getTabCount() {
+            return tabs.size();
+        }
+        
+        /**
+         * 更新指定面板的标签页标题
+         */
+        public void updateTabTitle(ConfigTabPanel panel, String newTitle) {
+            for (ConfigTabInfo tab : tabs) {
+                if (tab.panel == panel) {
+                    tab.title = newTitle;
+                    // 根据启用状态显示不同的标题样式
+                    boolean enabled = tab.data.enabled;
+                    String displayTitle = enabled ? newTitle : newTitle + " (禁用)";
+                    tab.tabButton.setText(displayTitle);
+                    
+                    // 设置不同的颜色来表示启用状态
+                    if (enabled) {
+                        tab.tabButton.setForeground(Color.BLACK);
+                    } else {
+                        tab.tabButton.setForeground(Color.GRAY);
+                    }
+                    break;
+                }
+            }
+        }
+    }
 
-            // 初始化组件
-            descriptionPanel = new JPanel(new BorderLayout());
-            descriptionTextArea = new JTextArea();
-            itemsPanel = new JPanel();
+    // 单个配置标签页面板
+    @SuppressWarnings("serial")
+    public class ConfigTabPanel extends JPanel {
+        private ConfigTabData configData;
+        private JPanel credentialsPanel;
+        
+        // UI组件
+        private JCheckBox enabledCheckBox;    // 新增：启用状态
+        private JTextField configNameField;   // 新增：配置名称
+        private JTextArea apiKeyField;
+        private JTextArea promptField;
+        private JTextField urlField;
+        private JTextField temperatureField;
+        private JComboBox<String> modelComboBox;
+        private JComboBox<String> apiComboBox;
+        private JTextField customModelField;
+        private JCheckBox useCustomModelCheckBox;
+        private JCheckBox temporaryCheckBox;
+        private JCheckBox cacheCheckBox;
+        private JCheckBox glossaryCheckBox;
+        
+        public ConfigTabPanel(ConfigTabData data) {
+            this.configData = data;
+            initComponents();
+            loadConfigData();
+        }
+        
+        private void initComponents() {
+            setLayout(new BorderLayout());
+            setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+            
             credentialsPanel = new JPanel(new GridBagLayout());
-
-            // 设置文本区域属性
-            descriptionTextArea.setEditable(false);
-            descriptionTextArea.setLineWrap(true);
-            descriptionTextArea.setWrapStyleWord(true);
-            descriptionTextArea.setOpaque(false);
-
+            
             // 创建输入组件
+            enabledCheckBox = new JCheckBox("启用此配置", true);
+            
+            // 添加启用状态变化监听器
+            enabledCheckBox.addActionListener(e -> {
+                configData.enabled = enabledCheckBox.isSelected();
+                // 更新标签页标题显示状态
+                Container parent = ConfigTabPanel.this.getParent();
+                while (parent != null && !(parent instanceof DynamicTabbedPane)) {
+                    parent = parent.getParent();
+                }
+                if (parent instanceof DynamicTabbedPane) {
+                    ((DynamicTabbedPane) parent).updateTabTitle(ConfigTabPanel.this, configData.name);
+                }
+            });
+            
+            configNameField = new JTextField();
+            
+            // 添加配置名称变化监听器
+            configNameField.getDocument().addDocumentListener(new DocumentListener() {
+                @Override
+                public void insertUpdate(DocumentEvent e) {
+                    updateTabTitle();
+                }
+                
+                @Override
+                public void removeUpdate(DocumentEvent e) {
+                    updateTabTitle();
+                }
+                
+                @Override
+                public void changedUpdate(DocumentEvent e) {
+                    updateTabTitle();
+                }
+                
+                private void updateTabTitle() {
+                    SwingUtilities.invokeLater(() -> {
+                        String newName = configNameField.getText().trim();
+                        if (!newName.isEmpty()) {
+                            configData.name = newName;
+                            // 通知父组件更新标签页标题
+                            Container parent = ConfigTabPanel.this.getParent();
+                            while (parent != null && !(parent instanceof DynamicTabbedPane)) {
+                                parent = parent.getParent();
+                            }
+                            if (parent instanceof DynamicTabbedPane) {
+                                ((DynamicTabbedPane) parent).updateTabTitle(ConfigTabPanel.this, newName);
+                            }
+                        }
+                    });
+                }
+            });
             apiKeyField = createMultiLineTextArea();
             urlField = new JTextField();
             promptField = createMultiLineTextArea();
@@ -524,57 +1240,186 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
                 boolean useCustom = useCustomModelCheckBox.isSelected();
                 handleCustomModelToggle(useCustom);
             });
+            
             temporaryCheckBox = new JCheckBox();
             cacheCheckBox = new JCheckBox(getString("MT_ENGINE_CACHE_BUTTON"), true);
             glossaryCheckBox = new JCheckBox(getString("MT_ENGINE_GLOSSARY_BUTTON"), true);
-
+            
             // 使用 GridBagLayout 添加组件
             GridBagConstraints gbc = new GridBagConstraints();
             gbc.insets = new Insets(5, 5, 5, 5);
             gbc.fill = GridBagConstraints.HORIZONTAL;
-
-            addLabelAndField(credentialsPanel, "MT_ENGINE_OPENAI_KEY_LABEL", apiKeyField, gbc, 0);
-            addLabelAndField(credentialsPanel, "MT_ENGINE_OPENAI_URL_LABEL", urlField, gbc, 1);
-            addLabelAndField(credentialsPanel, "MT_ENGINE_OPENAI_PROMPT_LABEL", promptField, gbc, 2);
-            addLabelAndField(credentialsPanel, "MT_ENGINE_OPENAI_TEMPERATURE_LABEL", temperatureField, gbc, 3);
-            addLabelAndField(credentialsPanel, "MT_ENGINE_OPENAI_MODEL_NAME_LABEL", modelComboBox, gbc, 4);
+            
+            // 首先添加启用状态复选框（放在顶部）
+            gbc.gridx = 0;
+            gbc.gridy = 0;
+            gbc.gridwidth = 2;
+            gbc.weightx = 1.0;
+            credentialsPanel.add(enabledCheckBox, gbc);
+            gbc.gridwidth = 1; // 重置
+            
+            // 添加配置名称字段
+            addLabelAndField(credentialsPanel, "配置名称", configNameField, gbc, 1);
+            
+            addLabelAndField(credentialsPanel, "MT_ENGINE_OPENAI_KEY_LABEL", apiKeyField, gbc, 2);
+            addLabelAndField(credentialsPanel, "MT_ENGINE_OPENAI_URL_LABEL", urlField, gbc, 3);
+            addLabelAndField(credentialsPanel, "MT_ENGINE_OPENAI_PROMPT_LABEL", promptField, gbc, 4);
+            addLabelAndField(credentialsPanel, "MT_ENGINE_OPENAI_TEMPERATURE_LABEL", temperatureField, gbc, 5);
+            addLabelAndField(credentialsPanel, "MT_ENGINE_OPENAI_MODEL_NAME_LABEL", modelComboBox, gbc, 6);
+            
             // 在同一位置添加自定义模型输入框，但初始隐藏
             gbc.gridx = 1;
-            gbc.gridy = 4;
+            gbc.gridy = 6;
             gbc.weightx = 1.0;
             credentialsPanel.add(customModelField, gbc);
-            addLabelAndField(credentialsPanel, "MT_ENGINE_OPENAI_API_FORMAT_LABEL", apiComboBox, gbc, 5);
-
+            
+            addLabelAndField(credentialsPanel, "MT_ENGINE_OPENAI_API_FORMAT_LABEL", apiComboBox, gbc, 7);
+            
             // 添加复选框
             gbc.gridx = 1;
-            gbc.gridy = 6;
-            credentialsPanel.add(useCustomModelCheckBox, gbc);
-            gbc.gridy = 7;
-            credentialsPanel.add(glossaryCheckBox, gbc);
             gbc.gridy = 8;
-            credentialsPanel.add(temporaryCheckBox, gbc);
+            credentialsPanel.add(useCustomModelCheckBox, gbc);
             gbc.gridy = 9;
+            credentialsPanel.add(glossaryCheckBox, gbc);
+            gbc.gridy = 10;
+            credentialsPanel.add(temporaryCheckBox, gbc);
+            gbc.gridy = 11;
             credentialsPanel.add(cacheCheckBox, gbc);
-
-            // 添加按钮面板
-            JPanel buttonPanel = new JPanel();
+            
+            // 设置复选框文本
             Mnemonics.setLocalizedText(temporaryCheckBox, OStrings.getString("PREFS_CREDENTIAL_TEMPORARY_LABEL"));
-            buttonPanel.setLayout(new BoxLayout(buttonPanel, BoxLayout.LINE_AXIS));
-            okButton = new JButton();
-            Mnemonics.setLocalizedText(okButton, OStrings.getString("BUTTON_OK"));
-            cancelButton = new JButton();
-            Mnemonics.setLocalizedText(cancelButton, OStrings.getString("BUTTON_CANCEL"));
-            buttonPanel.add(Box.createHorizontalGlue());
-            buttonPanel.add(okButton);
-            buttonPanel.add(Box.createRigidArea(new Dimension(5, 0)));
-            buttonPanel.add(cancelButton);
-
-            // 组装面板
-            add(descriptionPanel, BorderLayout.NORTH);
+            
             add(credentialsPanel, BorderLayout.CENTER);
-            add(buttonPanel, BorderLayout.SOUTH);
         }
-
+        
+        private void loadConfigData() {
+            enabledCheckBox.setSelected(configData.enabled);
+            configNameField.setText(configData.name);
+            apiKeyField.setText(configData.apiKey);
+            urlField.setText(configData.apiUrl);
+            promptField.setText(configData.prompt);
+            temperatureField.setText(configData.temperature);
+            
+            // 设置模型下拉框
+            modelComboBox.setModel(new DefaultComboBoxModel<>(getAllModels()));
+            
+            if (configData.useCustomModel) {
+                customModelField.setText(configData.customModel);
+                useCustomModelCheckBox.setSelected(true);
+                handleCustomModelToggle(true);
+            } else {
+                modelComboBox.setSelectedItem(configData.model);
+                useCustomModelCheckBox.setSelected(false);
+            }
+            
+            apiComboBox.setModel(new DefaultComboBoxModel<>(Providers));
+            apiComboBox.setSelectedItem(configData.apiProvider);
+            
+            cacheCheckBox.setSelected(configData.enableCache);
+            glossaryCheckBox.setSelected(configData.enableGlossary);
+            temporaryCheckBox.setSelected(configData.temporaryCredential);
+        }
+        
+        public void updateConfigData() {
+            configData.enabled = enabledCheckBox.isSelected();
+            configData.name = configNameField.getText().trim();
+            configData.apiKey = apiKeyField.getText().trim();
+            configData.apiUrl = urlField.getText().trim();
+            configData.prompt = promptField.getText().trim();
+            configData.temperature = temperatureField.getText().trim();
+            
+            configData.useCustomModel = useCustomModelCheckBox.isSelected();
+            if (configData.useCustomModel) {
+                configData.customModel = customModelField.getText().trim();
+            } else {
+                configData.model = (String) modelComboBox.getSelectedItem();
+            }
+            
+            configData.apiProvider = (String) apiComboBox.getSelectedItem();
+            configData.enableCache = cacheCheckBox.isSelected();
+            configData.enableGlossary = glossaryCheckBox.isSelected();
+            configData.temporaryCredential = temporaryCheckBox.isSelected();
+        }
+        
+        private void handleCustomModelToggle(boolean useCustom) {
+            SwingUtilities.invokeLater(() -> {
+                if (useCustom) {
+                    // 隐藏下拉框，显示输入框
+                    modelComboBox.setVisible(false);
+                    customModelField.setVisible(true);
+                    updateApiComboBoxForCustom();
+                } else {
+                    // 显示下拉框，隐藏输入框
+                    customModelField.setVisible(false);
+                    modelComboBox.setVisible(true);
+                    restoreOriginalApiComboBox();
+                }
+                credentialsPanel.revalidate();
+                credentialsPanel.repaint();
+            });
+        }
+        
+        private void updateApiComboBoxForCustom() {
+            String[] providersWithoutDefault = {"OpenAI", "Claude", "DeepSeek", "VolcEngine"};
+            String currentSelection = (String) apiComboBox.getSelectedItem();
+            apiComboBox.setModel(new DefaultComboBoxModel<>(providersWithoutDefault));
+            
+            // 如果当前选择是 default，自动切换到 OpenAI
+            if ("default".equals(currentSelection)) {
+                apiComboBox.setSelectedItem("OpenAI");
+            } else if (Arrays.asList(providersWithoutDefault).contains(currentSelection)) {
+                apiComboBox.setSelectedItem(currentSelection);
+            } else {
+                apiComboBox.setSelectedItem("OpenAI");
+            }
+        }
+        
+        private void restoreOriginalApiComboBox() {
+            String currentSelection = (String) apiComboBox.getSelectedItem();
+            apiComboBox.setModel(new DefaultComboBoxModel<>(Providers));
+            
+            // 恢复之前的选择，如果仍然有效的话
+            if (Arrays.asList(Providers).contains(currentSelection)) {
+                apiComboBox.setSelectedItem(currentSelection);
+            }
+        }
+        
+        private void addLabelAndField(JPanel panel, String labelKey, JComponent field, GridBagConstraints gbc, int row) {
+            gbc.gridx = 0;
+            gbc.gridy = row;
+            gbc.weightx = 0.0;
+            
+            // 检查是否是资源键还是直接字符串
+            String labelText;
+            try {
+                labelText = getString(labelKey);
+            } catch (Exception e) {
+                // 如果不是资源键，直接使用字符串
+                labelText = labelKey;
+            }
+            
+            panel.add(new JLabel(labelText), gbc);
+            
+            gbc.gridx = 1;
+            gbc.weightx = 1.0;
+            // 如果是 JTextArea，用 JScrollPane 包装
+            if (field instanceof JTextArea) {
+                JScrollPane scrollPane = new JScrollPane(field);
+                scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+                scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+                panel.add(scrollPane, gbc);
+            } else {
+                panel.add(field, gbc);
+            }
+            gbc.weightx = 0.0;
+        }
+        
+        public ConfigTabData getConfigData() {
+            updateConfigData();
+            return configData;
+        }
+        
+        // 创建多行文本区域的私有方法
         private JTextArea createMultiLineTextArea() {
             JTextArea textArea = new JTextArea();
             textArea.setLineWrap(true);
@@ -654,70 +1499,234 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
 
             return textArea;
         }
+    }
+
+    @SuppressWarnings("serial")
+    public class OpenAIConfigPanel extends JPanel {
+        private DynamicTabbedPane tabbedPane;
+        public javax.swing.JButton okButton;
+        public javax.swing.JButton cancelButton;
         
+        // 兼容性属性，用于向后兼容
+        public javax.swing.JTextArea apiKeyField;
+        public javax.swing.JTextArea promptField;
+        public javax.swing.JTextField urlField;
+        public javax.swing.JTextField temperatureField;
+        public javax.swing.JComboBox<String> modelComboBox;
+        public javax.swing.JComboBox<String> apiComboBox;
+        public javax.swing.JTextField customModelField;
+        public javax.swing.JCheckBox useCustomModelCheckBox;
+        public javax.swing.JCheckBox temporaryCheckBox;
+        public javax.swing.JCheckBox cacheCheckBox;
+        public javax.swing.JCheckBox glossaryCheckBox;
+
+        public OpenAIConfigPanel() {
+            initComponents();
+        }
         
-        private void handleCustomModelToggle(boolean useCustom) {
-            SwingUtilities.invokeLater(() -> {
-                if (useCustom) {
-                    // 隐藏下拉框，显示输入框
-                    modelComboBox.setVisible(false);
-                    customModelField.setVisible(true);
-                    updateApiComboBoxForCustom();
-                } else {
-                    // 显示下拉框，隐藏输入框
-                    customModelField.setVisible(false);
-                    modelComboBox.setVisible(true);
-                    restoreOriginalApiComboBox();
+        public OpenAIConfigPanel(ConfigTabData initialData) {
+            initComponents(initialData);
+        }
+        
+        public OpenAIConfigPanel(List<ConfigTabData> allConfigs) {
+            initComponents(allConfigs);
+        }
+
+        private void initComponents() {
+            initComponents((ConfigTabData) null);
+        }
+        
+        private void initComponents(ConfigTabData initialData) {
+            setLayout(new BorderLayout());
+            setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+            
+            // 创建动态标签页组件
+            tabbedPane = new DynamicTabbedPane(initialData);
+            
+            // 创建按钮面板
+            JPanel buttonPanel = createButtonPanel();
+            
+            // 组装面板
+            add(tabbedPane, BorderLayout.CENTER);
+            add(buttonPanel, BorderLayout.SOUTH);
+            
+            // 初始化兼容性属性（指向当前选中的标签页的组件）
+            updateCompatibilityFields();
+        }
+        
+        private void initComponents(List<ConfigTabData> allConfigs) {
+            setLayout(new BorderLayout());
+            setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+            
+            // 创建动态标签页组件
+            tabbedPane = new DynamicTabbedPane(allConfigs);
+            
+            // 创建按钮面板
+            JPanel buttonPanel = createButtonPanel();
+            
+            // 组装面板
+            add(tabbedPane, BorderLayout.CENTER);
+            add(buttonPanel, BorderLayout.SOUTH);
+            
+            // 初始化兼容性属性（指向当前选中的标签页的组件）
+            updateCompatibilityFields();
+        }
+        
+        private JPanel createButtonPanel() {
+            JPanel buttonPanel = new JPanel();
+            buttonPanel.setLayout(new BoxLayout(buttonPanel, BoxLayout.LINE_AXIS));
+            
+            okButton = new JButton();
+            Mnemonics.setLocalizedText(okButton, OStrings.getString("BUTTON_OK"));
+            
+            cancelButton = new JButton();
+            Mnemonics.setLocalizedText(cancelButton, OStrings.getString("BUTTON_CANCEL"));
+            
+            buttonPanel.add(Box.createHorizontalGlue());
+            buttonPanel.add(okButton);
+            buttonPanel.add(Box.createRigidArea(new Dimension(5, 0)));
+            buttonPanel.add(cancelButton);
+            
+            return buttonPanel;
+        }
+        
+        /**
+         * 更新兼容性属性，使其指向当前选中的标签页的组件
+         * 这样可以保持与现有代码的兼容性
+         */
+        private void updateCompatibilityFields() {
+            if (tabbedPane.getTabCount() > 0) {
+                DynamicTabbedPane.ConfigTabInfo currentTab = tabbedPane.tabs.get(tabbedPane.selectedIndex >= 0 ? tabbedPane.selectedIndex : 0);
+                ConfigTabPanel currentPanel = currentTab.panel;
+                
+                // 更新兼容性属性引用
+                this.apiKeyField = currentPanel.apiKeyField;
+                this.promptField = currentPanel.promptField;
+                this.urlField = currentPanel.urlField;
+                this.temperatureField = currentPanel.temperatureField;
+                this.modelComboBox = currentPanel.modelComboBox;
+                this.apiComboBox = currentPanel.apiComboBox;
+                this.customModelField = currentPanel.customModelField;
+                this.useCustomModelCheckBox = currentPanel.useCustomModelCheckBox;
+                this.temporaryCheckBox = currentPanel.temporaryCheckBox;
+                this.cacheCheckBox = currentPanel.cacheCheckBox;
+                this.glossaryCheckBox = currentPanel.glossaryCheckBox;
+            }
+        }
+        
+        /**
+         * 获取当前选中的配置数据
+         */
+        public ConfigTabData getCurrentConfigData() {
+            updateCompatibilityFields(); // 确保引用是最新的
+            return tabbedPane.getCurrentConfigData();
+        }
+        
+        /**
+         * 获取所有标签页的配置数据
+         */
+        public List<ConfigTabData> getAllConfigData() {
+            return tabbedPane.getAllConfigData();
+        }
+        
+        /**
+         * 加载配置数据到首个标签页（保持兼容性）
+         */
+        public void loadConfigToFirstTab(ConfigTabData data) {
+            if (tabbedPane.getTabCount() > 0) {
+                DynamicTabbedPane.ConfigTabInfo firstTab = tabbedPane.tabs.get(0);
+                firstTab.data = data;
+                firstTab.panel.loadConfigData();
+                updateCompatibilityFields();
+            }
+        }
+        
+        /**
+         * 获取动态标签页组件
+         */
+        public DynamicTabbedPane getTabbedPane() {
+            return tabbedPane;
+        }
+
+        // 为 ConfigTabPanel 提供的公共方法
+        private JTextArea createMultiLineTextArea() {
+            JTextArea textArea = new JTextArea();
+            textArea.setLineWrap(true);
+            textArea.setWrapStyleWord(true);
+
+            // 设置基础参数
+            int minRows = 1;
+            int maxRows = 5;
+            int minWidth = 200;
+            int maxWidth = 400;
+            int padding = 2; // 文本区域内边距
+
+            // 获取字体度量以准确计算文本高度
+            FontMetrics fm = textArea.getFontMetrics(textArea.getFont());
+            int lineHeight = fm.getHeight();
+
+            // 设置初始大小
+            Dimension minSize = new Dimension(minWidth, lineHeight * minRows + 2 * padding);
+            Dimension maxSize = new Dimension(maxWidth, lineHeight * maxRows + 2 * padding);
+
+            textArea.setMinimumSize(minSize);
+            textArea.setMaximumSize(maxSize);
+            textArea.setPreferredSize(minSize);
+
+            textArea.getDocument().addDocumentListener(new DocumentListener() {
+                private void updateSize() {
+                    SwingUtilities.invokeLater(() -> {
+                        try {
+                            // 获取文本区域的实际内容
+                            String text = textArea.getText();
+                            Rectangle viewRect = textArea.getVisibleRect();
+
+                            // 计算需要的行数
+                            int availableWidth = Math.max(minWidth, viewRect.width - 2 * padding);
+                            int textWidth = fm.stringWidth(text);
+                            int estimatedRows = Math.max(
+                                    minRows, Math.min(maxRows, (int) Math.ceil((double) textWidth / availableWidth)));
+
+                            // 计算新的首选高度
+                            int newHeight = lineHeight * estimatedRows + 2 * padding;
+
+                            // 设置新的首选大小
+                            Dimension newSize =
+                                    new Dimension(Math.min(maxWidth, Math.max(minWidth, viewRect.width)), newHeight);
+
+                            if (!textArea.getPreferredSize().equals(newSize)) {
+                                textArea.setPreferredSize(newSize);
+                                textArea.revalidate();
+                            }
+                        } catch (Exception e) {
+                            // 处理可能的异常
+                            LOGGER.error("更新文本区域大小时出错", e);
+                        }
+                    });
                 }
-                credentialsPanel.revalidate();
-                credentialsPanel.repaint();
+
+                @Override
+                public void insertUpdate(DocumentEvent e) {
+                    updateSize();
+                }
+
+                @Override
+                public void removeUpdate(DocumentEvent e) {
+                    updateSize();
+                }
+
+                @Override
+                public void changedUpdate(DocumentEvent e) {
+                    updateSize();
+                }
             });
-        }
-        
-        private void updateApiComboBoxForCustom() {
-            String[] providersWithoutDefault = {"OpenAI", "Claude", "DeepSeek", "VolcEngine"};
-            String currentSelection = (String) apiComboBox.getSelectedItem();
-            apiComboBox.setModel(new DefaultComboBoxModel<>(providersWithoutDefault));
-            
-            // 如果当前选择是 default，自动切换到 OpenAI
-            if ("default".equals(currentSelection)) {
-                apiComboBox.setSelectedItem("OpenAI");
-            } else if (Arrays.asList(providersWithoutDefault).contains(currentSelection)) {
-                apiComboBox.setSelectedItem(currentSelection);
-            } else {
-                apiComboBox.setSelectedItem("OpenAI");
-            }
-        }
-        
-        private void restoreOriginalApiComboBox() {
-            String currentSelection = (String) apiComboBox.getSelectedItem();
-            apiComboBox.setModel(new DefaultComboBoxModel<>(Providers));
-            
-            // 恢复之前的选择，如果仍然有效的话
-            if (Arrays.asList(Providers).contains(currentSelection)) {
-                apiComboBox.setSelectedItem(currentSelection);
-            }
-        }
 
-        private void addLabelAndField(
-                JPanel panel, String labelKey, JComponent field, GridBagConstraints gbc, int row) {
-            gbc.gridx = 0;
-            gbc.gridy = row;
-            gbc.weightx = 0.0;
-            panel.add(new JLabel(getString(labelKey)), gbc);
+            // 设置边框和外观
+            textArea.setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createLineBorder(Color.GRAY),
+                    BorderFactory.createEmptyBorder(padding, padding, padding, padding)));
 
-            gbc.gridx = 1;
-            gbc.weightx = 1.0;
-            // 如果是 JTextArea，用 JScrollPane 包装
-            if (field instanceof JTextArea) {
-                JScrollPane scrollPane = new JScrollPane(field);
-                scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
-                scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
-                panel.add(scrollPane, gbc);
-            } else {
-                panel.add(field, gbc);
-            }
-            gbc.weightx = 0.0;
+            return textArea;
         }
     }
 
@@ -728,7 +1737,22 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
         public OpenAIConfigDialog(Window parent, String title) {
             dialog = new JDialog(parent, title, Dialog.ModalityType.APPLICATION_MODAL);
             panel = new OpenAIConfigPanel();
-
+            initDialog();
+        }
+        
+        public OpenAIConfigDialog(Window parent, String title, ConfigTabData initialData) {
+            dialog = new JDialog(parent, title, Dialog.ModalityType.APPLICATION_MODAL);
+            panel = new OpenAIConfigPanel(initialData);
+            initDialog();
+        }
+        
+        public OpenAIConfigDialog(Window parent, String title, List<ConfigTabData> allConfigs) {
+            dialog = new JDialog(parent, title, Dialog.ModalityType.APPLICATION_MODAL);
+            panel = new OpenAIConfigPanel(allConfigs);
+            initDialog();
+        }
+        
+        private void initDialog() {
             JScrollPane scrollPane = new JScrollPane(panel);
             scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
 
@@ -765,72 +1789,25 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
      */
     @Override
     public void showConfigurationUI(Window parent) {
-        OpenAIConfigDialog dialog = new OpenAIConfigDialog(parent, getName()) {
+        // 加载所有配置数据
+        List<ConfigTabData> allConfigs = loadAllConfigs();
+
+        OpenAIConfigDialog dialog = new OpenAIConfigDialog(parent, getName(), allConfigs) {
             @Override
             protected void onConfirm() {
                 OpenAIConfigPanel panel = getPanel();
-                boolean temporary = panel.temporaryCheckBox.isSelected();
-
-                // 保存凭证信息
-                setCredential(PROPERTY_API_KEY, panel.apiKeyField.getText().trim(), temporary);
-                Preferences.setPreference(
-                        PROPERTY_API_URL, panel.urlField.getText().trim());
-
-                // 保存其他设置到 Preferences
-                Preferences.setPreference(
-                        PROPERTY_API_PROMPT, panel.promptField.getText().trim());
-                Preferences.setPreference(
-                        PROPERTY_API_TEMPERATURE,
-                        panel.temperatureField.getText().trim());
-                // 保存模型设置
-                boolean useCustomModel = panel.useCustomModelCheckBox.isSelected();
-                Preferences.setPreference(PROPERTY_USE_CUSTOM_MODEL, String.valueOf(useCustomModel));
                 
-                if (useCustomModel) {
-                    // 保存自定义模型名称
-                    String customModel = panel.customModelField.getText().trim();
-                    Preferences.setPreference(PROPERTY_API_CUSTOM_MODEL, customModel);
-                    // 将 PROPERTY_API_MODEL 设置为 "custom" 以保持兼容性
-                    Preferences.setPreference(PROPERTY_API_MODEL, "custom");
-                } else {
-                    // 保存选中的预设模型
-                    String selectedModel = (String) panel.modelComboBox.getSelectedItem();
-                    Preferences.setPreference(PROPERTY_API_MODEL, selectedModel);
+                // 获取所有配置数据
+                List<ConfigTabData> allConfigs = panel.getAllConfigData();
+                if (allConfigs == null || allConfigs.isEmpty()) {
+                    LOGGER.warn("无法获取配置数据");
+                    return;
                 }
-                Preferences.setPreference(PROPERTY_API_PROVIDER, (String) panel.apiComboBox.getSelectedItem());
-                Preferences.setPreference(PROPERTY_API_CACHE, panel.cacheCheckBox.isSelected());
-                Preferences.setPreference(PROPERTY_API_GLOSSARY, panel.glossaryCheckBox.isSelected());
+                
+                // 保存所有配置
+                saveAllConfigurations(allConfigs);
             }
         };
-
-        // 设置初始值
-        OpenAIConfigPanel panel = dialog.getPanel();
-        panel.apiKeyField.setText(getCredential(PROPERTY_API_KEY));
-        panel.urlField.setText(Preferences.getPreference(PROPERTY_API_URL));
-        panel.promptField.setText(Preferences.getPreference(PROPERTY_API_PROMPT));
-        panel.temperatureField.setText(Preferences.getPreference(PROPERTY_API_TEMPERATURE));
-        // 设置模型下拉框
-        panel.modelComboBox.setModel(new DefaultComboBoxModel<>(getAllModels()));
-        
-        String savedModel = Preferences.getPreference(PROPERTY_API_MODEL);
-        boolean useCustomModel = Boolean.parseBoolean(Preferences.getPreference(PROPERTY_USE_CUSTOM_MODEL));
-        
-        if (useCustomModel) {
-            // 使用自定义模型
-            String customModel = Preferences.getPreference(PROPERTY_API_CUSTOM_MODEL);
-            panel.customModelField.setText(customModel != null ? customModel : "");
-            panel.useCustomModelCheckBox.setSelected(true);
-            panel.handleCustomModelToggle(true);
-        } else {
-            // 使用预设模型
-            panel.modelComboBox.setSelectedItem(savedModel);
-            panel.useCustomModelCheckBox.setSelected(false);
-        }
-        panel.apiComboBox.setModel(new DefaultComboBoxModel<>(Providers));
-        panel.apiComboBox.setSelectedItem(Preferences.getPreference(PROPERTY_API_PROVIDER));
-        panel.cacheCheckBox.setSelected(Boolean.parseBoolean(Preferences.getPreference(PROPERTY_API_CACHE)));
-        panel.temporaryCheckBox.setSelected(false);
-        panel.glossaryCheckBox.setSelected(Boolean.parseBoolean(Preferences.getPreference(PROPERTY_API_GLOSSARY)));
 
         dialog.show();
     }
