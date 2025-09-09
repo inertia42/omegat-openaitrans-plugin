@@ -173,7 +173,7 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
             // 尝试从配置中读取名称，如果没有则使用默认值
             String configName = Preferences.getPreference(String.format(PROPERTY_CONFIG_NAME_TEMPLATE, "api"));
             if (configName == null || configName.trim().isEmpty()) {
-                configName = "默认配置";
+                configName = getString("CONFIG_DEFAULT_NAME");
             }
             data = new ConfigTabData("api", configName);
             data.apiKey = getCredential(PROPERTY_API_KEY);
@@ -213,7 +213,7 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
             // 其他配置使用模板key结构
             String configName = Preferences.getPreference(String.format(PROPERTY_CONFIG_NAME_TEMPLATE, configId));
             if (configName == null || configName.trim().isEmpty()) {
-                configName = "配置 " + configId;
+                configName = getString("CONFIG_NAME_PREFIX") + configId;
             }
             
             data = new ConfigTabData(configId, configName);
@@ -888,7 +888,7 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
             
             // 添加按钮
             JButton addButton = new JButton("+");
-            addButton.setToolTipText("添加新的配置标签页");
+            addButton.setToolTipText(getString("CONFIG_ADD_TAB_TOOLTIP"));
             addButton.setPreferredSize(new Dimension(30, 25));
             addButton.setMaximumSize(new Dimension(30, 25));
             addButton.addActionListener(e -> addNewTab());
@@ -925,7 +925,7 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
             
             // 添加按钮
             JButton addButton = new JButton("+");
-            addButton.setToolTipText("添加新的配置标签页");
+            addButton.setToolTipText(getString("CONFIG_ADD_TAB_TOOLTIP"));
             addButton.setPreferredSize(new Dimension(30, 25));
             addButton.setMaximumSize(new Dimension(30, 25));
             addButton.addActionListener(e -> addNewTab());
@@ -951,7 +951,7 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
         }
         
         private void addDefaultTab() {
-            ConfigTabData defaultData = new ConfigTabData("默认配置");
+            ConfigTabData defaultData = new ConfigTabData(getString("CONFIG_DEFAULT_NAME"));
             addTab(defaultData);
         }
         
@@ -961,7 +961,7 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
         }
         
         private void addNewTab() {
-            String newTabName = "配置 " + tabCounter++;
+            String newTabName = getString("CONFIG_NAME_PREFIX") + tabCounter++;
             ConfigTabData newData = new ConfigTabData(newTabName);
             
             // 如果有选中的标签页，复制其配置作为模板
@@ -999,7 +999,7 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
             tabInfo.closeButton.setBorderPainted(false);
             tabInfo.closeButton.setContentAreaFilled(false);
             tabInfo.closeButton.setFocusable(false);
-            tabInfo.closeButton.setToolTipText("关闭标签页");
+            tabInfo.closeButton.setToolTipText(getString("CONFIG_CLOSE_TAB_TOOLTIP"));
             tabInfo.closeButton.addActionListener(e -> removeTab(tabs.indexOf(tabInfo)));
             
             // 创建标签页面板
@@ -1125,7 +1125,7 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
                     tab.title = newTitle;
                     // 根据启用状态显示不同的标题样式
                     boolean enabled = tab.data.enabled;
-                    String displayTitle = enabled ? newTitle : newTitle + " (禁用)";
+                    String displayTitle = enabled ? newTitle : newTitle + getString("CONFIG_DISABLED_SUFFIX");
                     tab.tabButton.setText(displayTitle);
                     
                     // 设置不同的颜色来表示启用状态
@@ -1174,7 +1174,7 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
             credentialsPanel = new JPanel(new GridBagLayout());
             
             // 创建输入组件
-            enabledCheckBox = new JCheckBox("启用此配置", true);
+            enabledCheckBox = new JCheckBox(getString("CONFIG_ENABLE_LABEL"), true);
             
             // 添加启用状态变化监听器
             enabledCheckBox.addActionListener(e -> {
@@ -1259,7 +1259,7 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
             gbc.gridwidth = 1; // 重置
             
             // 添加配置名称字段
-            addLabelAndField(credentialsPanel, "配置名称", configNameField, gbc, 1);
+            addLabelAndField(credentialsPanel, getString("CONFIG_NAME_LABEL"), configNameField, gbc, 1);
             
             addLabelAndField(credentialsPanel, "MT_ENGINE_OPENAI_KEY_LABEL", apiKeyField, gbc, 2);
             addLabelAndField(credentialsPanel, "MT_ENGINE_OPENAI_URL_LABEL", urlField, gbc, 3);
