@@ -47,6 +47,15 @@ java {
 }
 
 dependencies {
+    // OmegaT
+    compileOnly("org.omegat:omegat:${omegat.version.get()}")
+
+    // Uber JAR
+    implementation("com.fasterxml.jackson.core:jackson-databind:2.17.1")
+    packIntoJar("net.bytebuddy:byte-buddy:1.14.17")
+
+    // Annotations
+    compileOnly("org.jetbrains:annotations:24.1.0")
     packIntoJar("org.slf4j:slf4j-api:2.0.7")
     implementation("org.netbeans.api:org-openide-awt:RELEASE130") 
     implementation("commons-io:commons-io:2.7")

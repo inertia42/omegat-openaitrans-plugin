@@ -54,40 +54,25 @@ import java.time.Duration;
 import org.openide.awt.Mnemonics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import net.bytebuddy.ByteBuddy;
+import net.bytebuddy.dynamic.loading.ClassLoadingStrategy;
+import net.bytebuddy.implementation.FixedValue;
+import net.bytebuddy.matcher.ElementMatchers;
 
-public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTranslation {
-
-    protected static final String PROPERTY_API_KEY = "openai.api.Key";
-
-    protected static final String PROPERTY_API_URL = "openai.api.url";
-    protected static final String PROPERTY_API_MODEL = "openai.api.model";
-    protected static final String PROPERTY_API_CUSTOM_MODEL = "openai.api.custom.model";
-    protected static final String PROPERTY_USE_CUSTOM_MODEL = "openai.api.use.custom.model";
-    protected static final String PROPERTY_API_PROVIDER = "openai.api.format";
-    protected static final String PROPERTY_API_PROMPT = "openai.api.prompt";
-    protected static final String PROPERTY_API_TEMPERATURE = "openai.api.temperature";
-    protected static final String PROPERTY_API_CACHE = "openai.api.enable.cache";
-    protected static final String PROPERTY_API_GLOSSARY = "openai.api.enable.glossary";
+// 抽象基础翻译器类
+abstract class BaseOpenaiTranslate extends BaseCachedTranslate implements IMachineTranslation {
+    protected String configId;
+    protected String displayName;
+    protected boolean showConfigUI;
     
-    // 多配置管理字段
-    protected static final String PROPERTY_CONFIG_LIST = "openai.config.list";
-    protected static final String PROPERTY_CONFIG_NAME_TEMPLATE = "openai.%s.config.name";
-    protected static final String PROPERTY_CONFIG_ENABLED_TEMPLATE = "openai.%s.config.enabled";
-    protected static final String PROPERTY_CONFIG_CREATED_TEMPLATE = "openai.%s.config.created";
+    protected static final Logger LOGGER = LoggerFactory.getLogger(BaseOpenaiTranslate.class);
     
-    // API配置字段模板（用于多配置）
-    protected static final String PROPERTY_API_KEY_TEMPLATE = "openai.%s.api.key";
-    protected static final String PROPERTY_API_URL_TEMPLATE = "openai.%s.api.url";
-    protected static final String PROPERTY_API_MODEL_TEMPLATE = "openai.%s.api.model";
-    protected static final String PROPERTY_API_CUSTOM_MODEL_TEMPLATE = "openai.%s.api.custom.model";
-    protected static final String PROPERTY_USE_CUSTOM_MODEL_TEMPLATE = "openai.%s.api.use.custom.model";
-    protected static final String PROPERTY_API_PROVIDER_TEMPLATE = "openai.%s.api.format";
-    protected static final String PROPERTY_API_PROMPT_TEMPLATE = "openai.%s.api.prompt";
-    protected static final String PROPERTY_API_TEMPERATURE_TEMPLATE = "openai.%s.api.temperature";
-    protected static final String PROPERTY_API_CACHE_TEMPLATE = "openai.%s.api.enable.cache";
-    protected static final String PROPERTY_API_GLOSSARY_TEMPLATE = "openai.%s.api.enable.glossary";
-    private static final ResourceBundle BUNDLE = ResourceBundle.getBundle("OpenaiTranslateBundle");
-
+    protected final HttpClient httpClient = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(30))
+            .build();
+    protected final ObjectMapper objectMapper = new ObjectMapper();
+    
+    // 共享的常量
     protected static final String[] openaiModels = {
         "gpt-5",
         "gpt-5-mini",
@@ -120,16 +105,516 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
     };
     protected static final String[] Providers = {"default", "OpenAI", "Claude", "DeepSeek", "VolcEngine"};
 
-    protected static final Logger LOGGER = LoggerFactory.getLogger(OpenaiTranslate.class);
-
-    private final HttpClient httpClient = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(30))
-            .build();
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    // 基础配置常量
+    protected static final String PROPERTY_API_KEY = "openai.api.Key";
+    protected static final String PROPERTY_API_URL = "openai.api.url";
+    protected static final String PROPERTY_API_MODEL = "openai.api.model";
+    protected static final String PROPERTY_API_CUSTOM_MODEL = "openai.api.custom.model";
+    protected static final String PROPERTY_USE_CUSTOM_MODEL = "openai.api.use.custom.model";
+    protected static final String PROPERTY_API_PROVIDER = "openai.api.format";
+    protected static final String PROPERTY_API_PROMPT = "openai.api.prompt";
+    protected static final String PROPERTY_API_TEMPERATURE = "openai.api.temperature";
+    protected static final String PROPERTY_API_CACHE = "openai.api.enable.cache";
+    protected static final String PROPERTY_API_GLOSSARY = "openai.api.enable.glossary";
+    
+    private static final ResourceBundle BUNDLE = ResourceBundle.getBundle("OpenaiTranslateBundle");
 
     static String getString(String key) {
         return BUNDLE.getString(key);
     }
+    
+    public BaseOpenaiTranslate(String configId, String displayName, boolean showConfigUI) {
+        this.configId = configId;
+        this.displayName = displayName;
+        this.showConfigUI = showConfigUI;
+    }
+    
+    @Override
+    public String getName() {
+        // This handles the case where the constructor is called by the superclass `BaseCachedTranslate`
+        // before `displayName` has been initialized. In that case, we fall back to the class
+        // name, which is a safe, non-null value for the cache key.
+        // For dynamically generated classes, Byte Buddy overrides this method entirely,
+        // so this logic only applies to the base `OpenaiTranslate` class.
+        if (displayName != null) {
+            return displayName;
+        }
+        return getClass().getName();
+    }
+    
+    @Override
+    public boolean isConfigurable() {
+        return showConfigUI;
+    }
+    
+    @Override
+    protected abstract String getPreferenceName();
+    
+    protected String getConfigKey(String baseKey) {
+        if ("api".equals(configId)) {
+            return baseKey;
+        } else {
+            return baseKey.replace("openai.", "openai." + configId + ".");
+        }
+    }
+    
+    protected String getCredential(String key) {
+        String property = System.getProperty(key);
+        if (property != null) {
+            return property;
+        }
+        return CredentialsManager.getInstance().retrieve(key).orElse("");
+    }
+    
+    protected void setCredential(String id, String value, boolean temporary) {
+        System.setProperty(id, value);
+        if (temporary) {
+            CredentialsManager.getInstance().store(id, "");
+        } else {
+            CredentialsManager.getInstance().store(id, value);
+        }
+    }
+    
+    // 执行实际的HTTP翻译请求
+    protected String executeTranslationRequest(String url, String apiKey, String model, double temperature, 
+                                               String prompt, String text, String provider, 
+                                               Language sLang, Language tLang) throws Exception {
+        String result = "";
+        
+        try {
+            HttpResponse<String> response;
+            if ("OpenAI".equals(provider) || "VolcEngine".equals(provider)) {
+                // 构建消息列表
+                Map<String, String> systemMessage = new HashMap<>();
+                systemMessage.put("role", "system");
+                systemMessage.put("content", prompt);
+
+                Map<String, String> userMessage = new HashMap<>();
+                userMessage.put("role", "user");
+                userMessage.put("content", text);
+
+                // 构建请求体
+                Map<String, Object> bodyMap = new HashMap<>();
+                bodyMap.put("model", model);
+                bodyMap.put("messages", Arrays.asList(systemMessage, userMessage));
+                bodyMap.put("temperature", temperature);
+
+                LOGGER.info("bodyMap = {}", bodyMap);
+                String bodyStr = objectMapper.writeValueAsString(bodyMap);
+                LOGGER.debug("bodyStr = {}", bodyStr);
+
+                HttpRequest request = HttpRequest.newBuilder()
+                        .uri(URI.create(url))
+                        .header("Authorization", "Bearer " + apiKey)
+                        .header("Content-Type", "application/json")
+                        .timeout(Duration.ofSeconds(60))
+                        .POST(HttpRequest.BodyPublishers.ofString(bodyStr))
+                        .build();
+
+                try {
+                    response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+                } catch (Exception e) {
+                    LOGGER.error("HTTP请求失败: {}", e.getMessage());
+                    if (e.getCause() instanceof javax.net.ssl.SSLHandshakeException) {
+                        LOGGER.error("SSL握手失败: {}", e.getMessage());
+                        return getString("MT_ENGINE_OPENAI_SSL_ERROR");
+                    } else if (e.getCause() instanceof java.net.SocketException) {
+                        LOGGER.error("网络连接错误: {}", e.getMessage());
+                        return getString("MT_ENGINE_OPENAI_NETWORK_ERROR");
+                    } else {
+                        return String.format(getString("MT_ENGINE_OPENAI_REQUEST_ERROR"), e.getMessage());
+                    }
+                }
+
+                final String responseBody = response.body();
+                LOGGER.debug("response body = {}", responseBody);
+
+                JsonNode jsonNode = objectMapper.readTree(responseBody);
+                JsonNode errorNode = jsonNode.get("error");
+                LOGGER.debug("response jsonobject error_code = {}", errorNode != null ? "has error" : "no error_code");
+                if (errorNode == null) {
+                    JsonNode choicesArray = jsonNode.get("choices");
+                    if (choicesArray != null && choicesArray.isArray() && choicesArray.size() > 0) {
+                        JsonNode contentNode = choicesArray.get(0).get("message").get("content");
+                        result = contentNode != null ? contentNode.asText() : "[Cannot get output]";
+                        putToCache(sLang, tLang, text, result);
+                    } else {
+                        result = "[Cannot get output]";
+                    }
+                } else {
+                    String error = errorNode.asText();
+                    if (error == null || error.isEmpty()) {
+                        result = "error code null，no description";
+                    } else {
+                        result = "error: " + error;
+                    }
+                }
+            } else if ("Claude".equals(provider)) {
+                // 构建消息列表
+                Map<String, String> userMessage = new HashMap<>();
+                userMessage.put("role", "user");
+                userMessage.put("content", text);
+
+                // 构建请求体
+                Map<String, Object> bodyMap = new HashMap<>();
+                bodyMap.put("model", model);
+                bodyMap.put("max_tokens", 4096);
+                bodyMap.put("system", prompt);
+                bodyMap.put("messages", Arrays.asList(userMessage));
+                bodyMap.put("temperature", temperature);
+
+                LOGGER.info("bodyMap = {}", bodyMap);
+                String bodyStr = objectMapper.writeValueAsString(bodyMap);
+                LOGGER.debug("bodyStr = {}", bodyStr);
+
+                HttpRequest request = HttpRequest.newBuilder()
+                        .uri(URI.create(url))
+                        .header("x-api-key", apiKey)
+                        .header("anthropic-version", "2023-06-01")
+                        .header("Content-Type", "application/json")
+                        .timeout(Duration.ofSeconds(60))
+                        .POST(HttpRequest.BodyPublishers.ofString(bodyStr))
+                        .build();
+
+                try {
+                    response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+                } catch (Exception e) {
+                    LOGGER.error("HTTP请求失败: {}", e.getMessage());
+                    if (e.getCause() instanceof javax.net.ssl.SSLHandshakeException) {
+                        LOGGER.error("SSL握手失败: {}", e.getMessage());
+                        return getString("MT_ENGINE_OPENAI_SSL_ERROR");
+                    } else if (e.getCause() instanceof java.net.SocketException) {
+                        LOGGER.error("网络连接错误: {}", e.getMessage());
+                        return getString("MT_ENGINE_OPENAI_NETWORK_ERROR");
+                    } else {
+                        return String.format(getString("MT_ENGINE_OPENAI_REQUEST_ERROR"), e.getMessage());
+                    }
+                }
+
+                final String responseBody = response.body();
+                LOGGER.debug("response body = {}", responseBody);
+
+                JsonNode jsonNode = objectMapper.readTree(responseBody);
+                JsonNode errorNode = jsonNode.get("error");
+                LOGGER.debug("response jsonobject error_code = {}", errorNode != null ? "has error" : "no error_code");
+                if (errorNode == null) {
+                    JsonNode contentArray = jsonNode.get("content");
+                    if (contentArray != null && contentArray.isArray() && contentArray.size() > 0) {
+                        JsonNode textNode = contentArray.get(0).get("text");
+                        result = textNode != null ? textNode.asText() : "[cannot get output]";
+                        putToCache(sLang, tLang, text, result);
+                    } else {
+                        result = "[cannot get output]";
+                    }
+                } else {
+                    String error = errorNode.asText();
+                    if (error == null || error.isEmpty()) {
+                        result = "error code null，no description";
+                    } else {
+                        result = "error: " + error;
+                    }
+                }
+            }
+
+            return result;
+
+        } catch (Exception e) {
+            LOGGER.error("翻译过程发生错误: {}", e.getMessage());
+            return String.format(getString("MT_ENGINE_OPENAI_GENERAL_ERROR"), e.getMessage());
+        }
+    }
+    
+    // 翻译实现将在具体子类中完成
+    @Override
+    protected abstract String translate(Language sLang, Language tLang, String text) throws Exception;
+}
+
+// 通用的配置翻译器实例
+class ConfigurableOpenaiTranslate extends BaseOpenaiTranslate {
+    
+    public ConfigurableOpenaiTranslate(String configId, String displayName, boolean showConfigUI) {
+        super(configId, displayName, showConfigUI);
+    }
+    
+    /**
+     * 新增构造函数，用于服务定位器模式
+     */
+    protected ConfigurableOpenaiTranslate(OpenaiTranslate.ConfigInfo info) {
+        super(info.configId, info.displayName, false);
+    }
+    
+    /**
+     * 为动态生成的子类提供无参构造函数.
+     * OmegaT 框架需要一个无参构造函数来实例化插件.
+     * 这个构造函数将通过静态 Map 查找其配置信息来完成初始化.
+     */
+    public ConfigurableOpenaiTranslate() {
+        // 调用父类构造函数之前无法访问 'this', 因此无法使用 getClass()
+        // 我们将初始化推迟到实际使用之前
+        super(null, null, false); // 临时调用, 值将在之后被正确设置
+    }
+    
+    private void lazyInit() {
+        // 如果 configId 为 null，说明是首次初始化
+        if (configId == null) {
+            OpenaiTranslate.ConfigInfo info = OpenaiTranslate.translatorConfigs.get(this.getClass());
+            if (info != null) {
+                this.configId = info.configId;
+                this.displayName = info.displayName;
+                this.showConfigUI = false;
+            } else {
+                LOGGER.error("无法为动态翻译器 {} 找到配置信息", this.getClass().getName());
+            }
+        }
+    }
+    
+    @Override
+    protected String translate(Language sLang, Language tLang, String text) throws Exception {
+        lazyInit(); // 确保在首次翻译时已初始化
+        return performTranslation(sLang, tLang, text, configId);
+    }
+    
+    // 实际的翻译逻辑，被主类和实例类共享
+    private String performTranslation(Language sLang, Language tLang, String text, String configId) throws Exception {
+        String apiKey = getCredential(getConfigKey(PROPERTY_API_KEY));
+        String url = Preferences.getPreference(getConfigKey(PROPERTY_API_URL));
+        String model = Preferences.getPreference(getConfigKey(PROPERTY_API_MODEL));
+        String temperature_str = Preferences.getPreference(getConfigKey(PROPERTY_API_TEMPERATURE));
+        if (temperature_str == null || temperature_str.trim().isEmpty()) {
+            temperature_str = "0";
+        }
+        String provider = Preferences.getPreference(getConfigKey(PROPERTY_API_PROVIDER));
+        String prompt = Preferences.getPreference(getConfigKey(PROPERTY_API_PROMPT));
+        String enableCache = Preferences.getPreference(getConfigKey(PROPERTY_API_CACHE));
+        String enableGlossary = Preferences.getPreference(getConfigKey(PROPERTY_API_GLOSSARY));
+
+        BigDecimal fullAccuracy = new BigDecimal(Double.parseDouble(temperature_str));
+        fullAccuracy = fullAccuracy.setScale(3, RoundingMode.DOWN);
+        double temperature = fullAccuracy.doubleValue();
+
+        if (apiKey.isEmpty()) {
+            return getString("MT_ENGINE_OPENAI_API_KEY_NOTFOUND");
+        }
+
+        if (url.isEmpty()) {
+            return getString("MT_ENGINE_OPENAI_API_URL_NOTFOUND");
+        }
+
+        // 处理自定义模型
+        boolean useCustomModel = Boolean.parseBoolean(Preferences.getPreference(getConfigKey(PROPERTY_USE_CUSTOM_MODEL)));
+        if (useCustomModel) {
+            String customModel = Preferences.getPreference(getConfigKey(PROPERTY_API_CUSTOM_MODEL));
+            if (customModel != null && !customModel.trim().isEmpty()) {
+                model = customModel.trim();
+            } else {
+                return getString("MT_ENGINE_OPENAI_CUSTOM_MODEL_EMPTY");
+            }
+        } else {
+            List<String> openaiModelsList = Arrays.asList(openaiModels);
+            List<String> claudeModelsList = Arrays.asList(claudeModels);
+
+            if (openaiModelsList.contains(model)) {
+                provider = ("default".equals(provider) || "DeepSeek".equals(provider)) ? "OpenAI" : provider;
+            } else if (claudeModelsList.contains(model)) {
+                provider = ("default".equals(provider)) ? "Claude" : provider;
+            } else {
+                return "An unsupported model was used!";
+            }
+        }
+
+        if ("OpenAI".equals(provider)) {
+            url += "/v1/chat/completions";
+        } else if ("Claude".equals(provider)) {
+            url += "/v1/messages";
+        } else if ("VolcEngine".equals(provider)) {
+            url += "/api/v3/chat/completions";
+        }
+
+        String lvSourceLang = sLang.getLanguage();
+        String lvTargetLang = tLang.getLanguage();
+
+        String defaultPrompt = String.format("Please translate the following text from %s to %s.", lvSourceLang, lvTargetLang);
+        if (prompt.isEmpty()) {
+            prompt = defaultPrompt;
+        }
+
+        String lvShortText = text.length() > 5000 ? text.substring(0, 4997) + "\u2026" : text;
+        String prev = getCachedTranslation(sLang, tLang, lvShortText);
+        if (prev != null && "true".equals(enableCache)) {
+            return prev;
+        }
+
+        StringBuilder glossaryTable = new StringBuilder();
+        if ("true".equals(enableGlossary)) {
+            List<org.omegat.gui.glossary.GlossaryEntry> entries = Core.getGlossaryManager()
+                    .searchSourceMatches(Core.getEditor().getCurrentEntry());
+            if (!entries.isEmpty()) {
+                glossaryTable.append("\nYou can refer to the following glossary when translating:\n");
+                for (org.omegat.gui.glossary.GlossaryEntry entry : entries) {
+                    glossaryTable.append(String.format(
+                            "src: %s, loc: %s, comment: %s\n",
+                            entry.getSrcText(), entry.getLocText(), entry.getCommentText()));
+                }
+                prompt = prompt + glossaryTable.toString();
+            }
+        }
+        
+        return executeTranslationRequest(url, apiKey, model, temperature, prompt, lvShortText, provider, sLang, tLang);
+    }
+    
+    @Override
+    protected String getConfigKey(String baseKey) {
+        lazyInit(); // 确保在获取配置键时已初始化
+        if ("api".equals(configId)) {
+            return baseKey;
+        } else {
+            return baseKey.replace("openai.", "openai." + configId + ".");
+        }
+    }
+
+    @Override
+    protected String getPreferenceName() {
+        lazyInit(); // Ensure initialization before accessing configId
+        return "allow_openai_translate_" + configId;
+    }
+}
+
+public class OpenaiTranslate extends BaseOpenaiTranslate {
+    
+    // 默认插件构造函数
+    public OpenaiTranslate() {
+        super("api", "Openai Translate", true);
+    }
+
+    @Override
+    public String getName() {
+        return "Openai Translate";
+    }
+
+    @Override
+    protected String getPreferenceName() {
+        return "allow_openai_translate";
+    }
+
+    @Override
+    protected String translate(Language sLang, Language tLang, String text) throws Exception {
+        return performTranslation(sLang, tLang, text);
+    }
+    
+    // 实际的翻译逻辑，使用默认配置
+    private String performTranslation(Language sLang, Language tLang, String text) throws Exception {
+        String apiKey = getCredential(getConfigKey(PROPERTY_API_KEY));
+        String url = Preferences.getPreference(getConfigKey(PROPERTY_API_URL));
+        String model = Preferences.getPreference(getConfigKey(PROPERTY_API_MODEL));
+        String temperature_str = Preferences.getPreference(getConfigKey(PROPERTY_API_TEMPERATURE));
+        if (temperature_str == null || temperature_str.trim().isEmpty()) {
+            temperature_str = "0";
+        }
+        String provider = Preferences.getPreference(getConfigKey(PROPERTY_API_PROVIDER));
+        String prompt = Preferences.getPreference(getConfigKey(PROPERTY_API_PROMPT));
+        String enableCache = Preferences.getPreference(getConfigKey(PROPERTY_API_CACHE));
+        String enableGlossary = Preferences.getPreference(getConfigKey(PROPERTY_API_GLOSSARY));
+
+        BigDecimal fullAccuracy = new BigDecimal(Double.parseDouble(temperature_str));
+        fullAccuracy = fullAccuracy.setScale(3, RoundingMode.DOWN);
+        double temperature = fullAccuracy.doubleValue();
+
+        if (apiKey.isEmpty()) {
+            return getString("MT_ENGINE_OPENAI_API_KEY_NOTFOUND");
+        }
+
+        if (url.isEmpty()) {
+            return getString("MT_ENGINE_OPENAI_API_URL_NOTFOUND");
+        }
+
+        // 处理自定义模型
+        boolean useCustomModel = Boolean.parseBoolean(Preferences.getPreference(getConfigKey(PROPERTY_USE_CUSTOM_MODEL)));
+        if (useCustomModel) {
+            String customModel = Preferences.getPreference(getConfigKey(PROPERTY_API_CUSTOM_MODEL));
+            if (customModel != null && !customModel.trim().isEmpty()) {
+                model = customModel.trim();
+            } else {
+                return getString("MT_ENGINE_OPENAI_CUSTOM_MODEL_EMPTY");
+            }
+        } else {
+            List<String> openaiModelsList = Arrays.asList(openaiModels);
+            List<String> claudeModelsList = Arrays.asList(claudeModels);
+
+            if (openaiModelsList.contains(model)) {
+                provider = ("default".equals(provider) || "DeepSeek".equals(provider)) ? "OpenAI" : provider;
+            } else if (claudeModelsList.contains(model)) {
+                provider = ("default".equals(provider)) ? "Claude" : provider;
+            } else {
+                return "An unsupported model was used!";
+            }
+        }
+
+        if ("OpenAI".equals(provider)) {
+            url += "/v1/chat/completions";
+        } else if ("Claude".equals(provider)) {
+            url += "/v1/messages";
+        } else if ("VolcEngine".equals(provider)) {
+            url += "/api/v3/chat/completions";
+        }
+
+        String lvSourceLang = sLang.getLanguage();
+        String lvTargetLang = tLang.getLanguage();
+
+        String defaultPrompt = String.format("Please translate the following text from %s to %s.", lvSourceLang, lvTargetLang);
+        if (prompt.isEmpty()) {
+            prompt = defaultPrompt;
+        }
+
+        String lvShortText = text.length() > 5000 ? text.substring(0, 4997) + "\u2026" : text;
+        String prev = getCachedTranslation(sLang, tLang, lvShortText);
+        if (prev != null && "true".equals(enableCache)) {
+            return prev;
+        }
+
+        StringBuilder glossaryTable = new StringBuilder();
+        if ("true".equals(enableGlossary)) {
+            List<org.omegat.gui.glossary.GlossaryEntry> entries = Core.getGlossaryManager()
+                    .searchSourceMatches(Core.getEditor().getCurrentEntry());
+            if (!entries.isEmpty()) {
+                glossaryTable.append("\nYou can refer to the following glossary when translating:\n");
+                for (org.omegat.gui.glossary.GlossaryEntry entry : entries) {
+                    glossaryTable.append(String.format(
+                            "src: %s, loc: %s, comment: %s\n",
+                            entry.getSrcText(), entry.getLocText(), entry.getCommentText()));
+                }
+                prompt = prompt + glossaryTable.toString();
+            }
+        }
+        
+        return executeTranslationRequest(url, apiKey, model, temperature, prompt, lvShortText, provider, sLang, tLang);
+    }
+    
+    @Override
+    protected String getConfigKey(String baseKey) {
+        if ("api".equals(configId)) {
+            return baseKey;
+        } else {
+            return baseKey.replace("openai.", "openai." + configId + ".");
+        }
+    }
+    
+    // 多配置管理字段
+    protected static final String PROPERTY_CONFIG_LIST = "openai.config.list";
+    protected static final String PROPERTY_CONFIG_NAME_TEMPLATE = "openai.%s.config.name";
+    protected static final String PROPERTY_CONFIG_ENABLED_TEMPLATE = "openai.%s.config.enabled";
+    protected static final String PROPERTY_CONFIG_CREATED_TEMPLATE = "openai.%s.config.created";
+    
+    // API配置字段模板（用于多配置）
+    protected static final String PROPERTY_API_KEY_TEMPLATE = "openai.%s.api.Key";
+    protected static final String PROPERTY_API_URL_TEMPLATE = "openai.%s.api.url";
+    protected static final String PROPERTY_API_MODEL_TEMPLATE = "openai.%s.api.model";
+    protected static final String PROPERTY_API_CUSTOM_MODEL_TEMPLATE = "openai.%s.api.custom.model";
+    protected static final String PROPERTY_USE_CUSTOM_MODEL_TEMPLATE = "openai.%s.api.use.custom.model";
+    protected static final String PROPERTY_API_PROVIDER_TEMPLATE = "openai.%s.api.format";
+    protected static final String PROPERTY_API_PROMPT_TEMPLATE = "openai.%s.api.prompt";
+    protected static final String PROPERTY_API_TEMPERATURE_TEMPLATE = "openai.%s.api.temperature";
+    protected static final String PROPERTY_API_CACHE_TEMPLATE = "openai.%s.api.enable.cache";
+    protected static final String PROPERTY_API_GLOSSARY_TEMPLATE = "openai.%s.api.enable.glossary";
     
     /**
      * 生成配置ID
@@ -408,7 +893,129 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
     @SuppressWarnings("unused")
     public static void loadPlugins() {
         LOGGER.debug("加载 OpenaiTranslate Plugin");
+        
+        // 注册默认插件
         Core.registerMachineTranslationClass(OpenaiTranslate.class);
+        
+        // 注册额外的翻译插件实例
+        registerAdditionalTranslators();
+    }
+    
+    /**
+     * 注册额外的翻译器实例
+     */
+    private static void registerAdditionalTranslators() {
+        // 读取配置列表并注册额外插件
+        List<String> configIds = getConfigList();
+        for (String configId : configIds) {
+            if (!"api".equals(configId)) { // 跳过默认配置
+                // 检查配置是否启用
+                String enabledStr = Preferences.getPreference(String.format(PROPERTY_CONFIG_ENABLED_TEMPLATE, configId));
+                boolean enabled = enabledStr == null || enabledStr.trim().isEmpty() ? true : Boolean.parseBoolean(enabledStr);
+                
+                if (enabled) {
+                    // 获取配置名称
+                    String configName = Preferences.getPreference(String.format(PROPERTY_CONFIG_NAME_TEMPLATE, configId));
+                    if (configName == null || configName.trim().isEmpty()) {
+                        configName = getString("CONFIG_NAME_PREFIX") + configId;
+                    }
+                    
+                    // 创建并注册配置特定的翻译器类
+                    registerConfigSpecificTranslator(configId, configName);
+                }
+            }
+        }
+    }
+    
+    /**
+     * 为特定配置注册翻译器
+     */
+    private static void registerConfigSpecificTranslator(String configId, String configName) {
+        try {
+            // 使用 Byte Buddy 动态生成继承自 ConfigurableOpenaiTranslate 的类
+            Class<? extends ConfigurableOpenaiTranslate> dynamicTranslatorClass = new ByteBuddy()
+                    .subclass(ConfigurableOpenaiTranslate.class)
+                    .name("xyz.inertia.machinetranslators.openaitrans.DynamicTranslator_" + configId)
+                    .method(ElementMatchers.named("getName"))
+                    .intercept(FixedValue.value(configName))
+                    .make()
+                    .load(OpenaiTranslate.class.getClassLoader(), ClassLoadingStrategy.Default.INJECTION)
+                    .getLoaded();
+
+            // 将配置信息存入中央注册表，以便无参构造函数可以进行懒加载初始化
+            translatorConfigs.put(dynamicTranslatorClass, new ConfigInfo(configId, configName));
+
+            // 注册这个动态生成的类
+            Core.registerMachineTranslationClass(dynamicTranslatorClass);
+            LOGGER.debug("动态注册插件实例: {} (配置ID: {})", configName, configId);
+        } catch (Exception e) {
+            LOGGER.error("注册插件实例失败: {} (配置ID: {}), 错误: {}", configName, configId, e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 为特定配置创建翻译器类
+     */
+    private static Class<? extends BaseOpenaiTranslate> createConfigTranslatorClass(String configId, String configName) {
+        // 使用工厂模式创建配置特定的翻译器类
+        return ConfigSpecificTranslatorFactory.createTranslatorClass(configId, configName);
+    }
+    
+    /**
+     * 中央配置注册表，用于存储类与配置信息的映射
+     */
+    static final Map<Class<?>, ConfigInfo> translatorConfigs = new HashMap<>();
+
+    /**
+     * 配置信息的数据载体
+     */
+    static class ConfigInfo {
+        final String configId;
+        final String displayName;
+
+        ConfigInfo(String configId, String displayName) {
+            this.configId = configId;
+            this.displayName = displayName;
+        }
+    }
+    
+    // 预定义的配置特定翻译器类
+    public static class AdditionalTranslator1 extends ConfigurableOpenaiTranslate {
+        public AdditionalTranslator1() { super(translatorConfigs.get(AdditionalTranslator1.class)); }
+    }
+    public static class AdditionalTranslator2 extends ConfigurableOpenaiTranslate {
+        public AdditionalTranslator2() { super(translatorConfigs.get(AdditionalTranslator2.class)); }
+    }
+    public static class AdditionalTranslator3 extends ConfigurableOpenaiTranslate {
+        public AdditionalTranslator3() { super(translatorConfigs.get(AdditionalTranslator3.class)); }
+    }
+    public static class AdditionalTranslator4 extends ConfigurableOpenaiTranslate {
+        public AdditionalTranslator4() { super(translatorConfigs.get(AdditionalTranslator4.class)); }
+    }
+    public static class AdditionalTranslator5 extends ConfigurableOpenaiTranslate {
+        public AdditionalTranslator5() { super(translatorConfigs.get(AdditionalTranslator5.class)); }
+    }
+    
+    /**
+     * 配置特定翻译器的工厂类
+     */
+    private static class ConfigSpecificTranslatorFactory {
+        private static int translatorCounter = 0;
+        private static final List<Class<? extends BaseOpenaiTranslate>> translatorClasses = Arrays.asList(
+                AdditionalTranslator1.class, AdditionalTranslator2.class,
+                AdditionalTranslator3.class, AdditionalTranslator4.class, AdditionalTranslator5.class
+        );
+
+        static Class<? extends BaseOpenaiTranslate> createTranslatorClass(String configId, String displayName) {
+            // 循环使用预定义的类
+            Class<? extends BaseOpenaiTranslate> translatorClass = translatorClasses.get(translatorCounter % translatorClasses.size());
+            translatorCounter++;
+            
+            // 将配置信息存入中央注册表，以类作为键
+            translatorConfigs.put(translatorClass, new ConfigInfo(configId, displayName));
+            
+            return translatorClass;
+        }
     }
 
     /**
@@ -417,25 +1024,7 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
     @SuppressWarnings("unused")
     public static void unloadPlugins() {}
 
-    /**
-     * 显示该插件介绍性的话.
-     *
-     * @return 介绍性话语
-     */
-    @Override
-    protected String getPreferenceName() {
-        return "allow_openai_translate";
-    }
-
-    /**
-     * 在软件里显示该翻译插件的名字.
-     *
-     * @return 本翻译插件显示的名字
-     */
-    @Override
-    public String getName() {
-        return "Openai Translate";
-    }
+    // 基类方法已在OpenaiTranslate类中重写以确保兼容性
 
     /**
      * Store a credential. Credentials are stored in temporary system properties and, if
@@ -487,275 +1076,9 @@ public class OpenaiTranslate extends BaseCachedTranslate implements IMachineTran
         return key;
     }
 
-    /**
-     * 插件主体功能函数，接收原文，获得译文并返回.
-     *
-     * @param sLang 原文的语言
-     * @param tLang 译文的语言
-     * @param text  原文内容
-     * @return 译文内容
-     * @throws Exception 根据示例代码也抛出异常
-     */
-    @Override
-    protected String translate(Language sLang, Language tLang, String text) throws Exception {
-        String apiKey = getCredential(PROPERTY_API_KEY);
-        String url = Preferences.getPreference(PROPERTY_API_URL);
-        String model = Preferences.getPreference(PROPERTY_API_MODEL);
-        String temperature_str = Preferences.getPreference(PROPERTY_API_TEMPERATURE);
-        if (temperature_str == null || temperature_str.trim().isEmpty()) {
-            temperature_str = "0";
-        }
-        String provider = Preferences.getPreference(PROPERTY_API_PROVIDER);
-        String prompt = Preferences.getPreference(PROPERTY_API_PROMPT);
-        String enableCache = Preferences.getPreference(PROPERTY_API_CACHE);
-        String enableGlossary = Preferences.getPreference(PROPERTY_API_GLOSSARY);
+    // 旧的translate方法已删除，功能已移到基类中
 
-        BigDecimal fullAccuracy = new BigDecimal(Double.parseDouble(temperature_str));
-        fullAccuracy = fullAccuracy.setScale(3, RoundingMode.DOWN); // 截断到三位小数
-        double temperature = fullAccuracy.doubleValue();
-
-        if (apiKey.isEmpty()) {
-            return getString("MT_ENGINE_OPENAI_API_KEY_NOTFOUND");
-        }
-
-        if (url.isEmpty()) {
-            return getString("MT_ENGINE_OPENAI_API_URL_NOTFOUND");
-        }
-
-        // 处理自定义模型
-        boolean useCustomModel = Boolean.parseBoolean(Preferences.getPreference(PROPERTY_USE_CUSTOM_MODEL));
-        if (useCustomModel) {
-            String customModel = Preferences.getPreference(PROPERTY_API_CUSTOM_MODEL);
-            if (customModel != null && !customModel.trim().isEmpty()) {
-                model = customModel.trim();
-            } else {
-                return getString("MT_ENGINE_OPENAI_CUSTOM_MODEL_EMPTY");
-            }
-            // 对于自定义模型，不自动设置 provider，保持用户选择
-        } else {
-            List<String> openaiModelsList = Arrays.asList(openaiModels);
-            List<String> claudeModelsList = Arrays.asList(claudeModels);
-
-            if (openaiModelsList.contains(model)) {
-                provider = ("default".equals(provider) || "DeepSeek".equals(provider)) ? "OpenAI" : provider;
-                // url += "/v1/chat/completions";
-            }
-            // 检查 model 是在 claudeModels 中
-            else if (claudeModelsList.contains(model)) {
-                provider = ("default".equals(provider)) ? "Claude" : provider;
-                // url += "/v1/messages";
-            }
-            // 如果 model 不在任何一个列表中
-            else {
-                return "An unsupported model was used!";
-            }
-        }
-
-        if ("OpenAI".equals(provider)) {
-            url += "/v1/chat/completions";
-        } else if ("Claude".equals(provider)) {
-            url += "/v1/messages";
-        } else if ("VolcEngine".equals(provider)) {
-            url += "/api/v3/chat/completions";
-        }
-
-        //     -----------------转换语言代码-----------------
-        String lvSourceLang = sLang.getLanguage();
-        String lvTargetLang = tLang.getLanguage();
-
-        String defaultPrompt =
-                String.format("Please translate the following text from %s to %s.", lvSourceLang, lvTargetLang);
-        if (prompt.isEmpty()) {
-            prompt = defaultPrompt;
-        }
-
-        // LOGGER.info("prompt = {}", prompt);
-
-        // 判断翻译缓存里有没有
-        // U+2026 HORIZONTAL ELLIPSIS 水平省略号 …
-        String lvShortText = text.length() > 5000 ? text.substring(0, 4997) + "\u2026" : text;
-        String prev = getCachedTranslation(sLang, tLang, lvShortText);
-        if (prev != null && "true".equals(enableCache)) {
-            return prev;
-        }
-
-        // 添加 glossary 信息
-        StringBuilder glossaryTable = new StringBuilder();
-        if ("true".equals(enableGlossary)) {
-            List<org.omegat.gui.glossary.GlossaryEntry> entries = Core.getGlossaryManager()
-                    .searchSourceMatches(Core.getEditor().getCurrentEntry());
-            if (!entries.isEmpty()) {
-                glossaryTable.append("\nYou can refer to the following glossary when translating:\n");
-
-                for (org.omegat.gui.glossary.GlossaryEntry entry : entries) {
-                    glossaryTable.append(String.format(
-                            "src: %s, loc: %s, comment: %s\n",
-                            entry.getSrcText(), entry.getLocText(), entry.getCommentText()));
-                }
-                prompt = prompt + glossaryTable.toString();
-            }
-        }
-        String result = "";
-
-        try {
-            HttpResponse<String> response;
-            if ("OpenAI".equals(provider) || "VolcEngine".equals(provider)) {
-                // 构建消息列表
-                Map<String, String> systemMessage = new HashMap<>();
-                systemMessage.put("role", "system");
-                systemMessage.put("content", prompt);
-
-                Map<String, String> userMessage = new HashMap<>();
-                userMessage.put("role", "user");
-                userMessage.put("content", lvShortText);
-
-                // 构建请求体
-                Map<String, Object> bodyMap = new HashMap<>();
-                bodyMap.put("model", model);
-                bodyMap.put("messages", Arrays.asList(systemMessage, userMessage));
-                bodyMap.put("temperature", temperature);
-
-                LOGGER.info("bodyMap = {}", bodyMap);
-                String bodyStr = objectMapper.writeValueAsString(bodyMap);
-                LOGGER.debug("bodyStr = {}", bodyStr);
-
-                HttpRequest request = HttpRequest.newBuilder()
-                        .uri(URI.create(url))
-                        .header("Authorization", "Bearer " + apiKey)
-                        .header("Content-Type", "application/json")
-                        .timeout(Duration.ofSeconds(60))
-                        .POST(HttpRequest.BodyPublishers.ofString(bodyStr))
-                        .build();
-
-                try {
-                    response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-                } catch (Exception e) {
-                    LOGGER.error("HTTP请求失败: {}", e.getMessage());
-                    // 根据异常类型返回不同的错误信息
-                    if (e.getCause() instanceof javax.net.ssl.SSLHandshakeException) {
-                        LOGGER.error("SSL握手失败: {}", e.getMessage());
-                        return getString("MT_ENGINE_OPENAI_SSL_ERROR");
-                    } else if (e.getCause() instanceof java.net.SocketException) {
-                        LOGGER.error("网络连接错误: {}", e.getMessage());
-                        return getString("MT_ENGINE_OPENAI_NETWORK_ERROR");
-                    } else {
-                        return String.format(getString("MT_ENGINE_OPENAI_REQUEST_ERROR"), e.getMessage());
-                    }
-                }
-
-                final String responseBody = response.body();
-
-                LOGGER.debug("response body = {}", responseBody);
-
-                JsonNode jsonNode = objectMapper.readTree(responseBody);
-                JsonNode errorNode = jsonNode.get("error");
-                LOGGER.debug("response jsonobject error_code = {}", errorNode != null ? "has error" : "no error_code");
-                if (errorNode == null) {
-                    // 如果没有错误码，获取回复结果
-                    JsonNode choicesArray = jsonNode.get("choices");
-                    if (choicesArray != null && choicesArray.isArray() && choicesArray.size() > 0) {
-                        JsonNode contentNode =
-                                choicesArray.get(0).get("message").get("content");
-                        result = contentNode != null ? contentNode.asText() : "[Cannot get output]";
-                        putToCache(sLang, tLang, lvShortText, result);
-                    } else {
-                        result = "[Cannot get output]";
-                    }
-                } else {
-                    // 如果有错误码，处理错误信息
-                    String error = errorNode.asText();
-                    if (error == null || error.isEmpty()) {
-                        result = "error code null，no description";
-                    } else {
-                        result = "error: " + error;
-                    }
-                }
-            } else if ("Claude".equals(provider)) {
-                // 构建消息列表
-                Map<String, String> userMessage = new HashMap<>();
-                userMessage.put("role", "user");
-                userMessage.put("content", lvShortText);
-
-                // 构建请求体
-                Map<String, Object> bodyMap = new HashMap<>();
-                bodyMap.put("model", model);
-                bodyMap.put("max_tokens", 4096);
-                bodyMap.put("system", prompt);
-                bodyMap.put("messages", Arrays.asList(userMessage));
-                bodyMap.put("temperature", temperature);
-
-                LOGGER.info("bodyMap = {}", bodyMap);
-                String bodyStr = objectMapper.writeValueAsString(bodyMap);
-                LOGGER.debug("bodyStr = {}", bodyStr);
-
-                HttpRequest request = HttpRequest.newBuilder()
-                        .uri(URI.create(url))
-                        .header("x-api-key", apiKey)
-                        .header("anthropic-version", "2023-06-01")
-                        .header("Content-Type", "application/json")
-                        .timeout(Duration.ofSeconds(60))
-                        .POST(HttpRequest.BodyPublishers.ofString(bodyStr))
-                        .build();
-
-                try {
-                    response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-                } catch (Exception e) {
-                    LOGGER.error("HTTP请求失败: {}", e.getMessage());
-                    // 根据异常类型返回不同的错误信息
-                    if (e.getCause() instanceof javax.net.ssl.SSLHandshakeException) {
-                        LOGGER.error("SSL握手失败: {}", e.getMessage());
-                        return getString("MT_ENGINE_OPENAI_SSL_ERROR");
-                    } else if (e.getCause() instanceof java.net.SocketException) {
-                        LOGGER.error("网络连接错误: {}", e.getMessage());
-                        return getString("MT_ENGINE_OPENAI_NETWORK_ERROR");
-                    } else {
-                        return String.format(getString("MT_ENGINE_OPENAI_REQUEST_ERROR"), e.getMessage());
-                    }
-                }
-
-                final String responseBody = response.body();
-
-                LOGGER.debug("response body = {}", responseBody);
-
-                JsonNode jsonNode = objectMapper.readTree(responseBody);
-                JsonNode errorNode = jsonNode.get("error");
-                LOGGER.debug("response jsonobject error_code = {}", errorNode != null ? "has error" : "no error_code");
-                if (errorNode == null) {
-                    // 如果没有错误码，获取回复结果
-                    JsonNode contentArray = jsonNode.get("content");
-                    if (contentArray != null && contentArray.isArray() && contentArray.size() > 0) {
-                        JsonNode textNode = contentArray.get(0).get("text");
-                        result = textNode != null ? textNode.asText() : "[cannot get output]";
-                        putToCache(sLang, tLang, lvShortText, result);
-                    } else {
-                        result = "[cannot get output]";
-                    }
-                } else {
-                    // 如果有错误码，处理错误信息
-                    String error = errorNode.asText();
-                    if (error == null || error.isEmpty()) {
-                        result = "error code null，no description";
-                    } else {
-                        result = "error: " + error;
-                    }
-                }
-            }
-
-            return result;
-
-        } catch (Exception e) {
-            LOGGER.error("翻译过程发生错误: {}", e.getMessage());
-            return String.format(getString("MT_ENGINE_OPENAI_GENERAL_ERROR"), e.getMessage());
-        }
-    }
-
-    /**
-     * 是否在设置界面允许该插件的配置按钮可用，如果 false，配置按钮是灰色不可点的，也就没法配置 Token 了
-     */
-    @Override
-    public boolean isConfigurable() {
-        return true;
-    }
+    // isConfigurable方法已在基类中实现
 
     // 配置数据模型
     public static class ConfigTabData {
